@@ -1,8 +1,7 @@
 <!-- 
   =========================================
   資産管理ダッシュボード 
-  Version: 5.0 (専用最適化版)
-  Date: 2026-09-16
+  Version: 6.0 (株価取得安定化・複数プロキシ対応版)
   =========================================
 -->
 <!DOCTYPE html>
@@ -10,7 +9,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資産管理ダッシュボード v5.0</title>
+    <title>資産管理ダッシュボード v6.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
@@ -68,17 +67,20 @@
             background: rgba(255,255,255,0.85); z-index: 9999;
             justify-content: center; align-items: center; flex-direction: column; font-weight: bold;
         }
-        .notice-box {
-            background: #eef2f5; color: #334155; padding: 12px 16px; border-radius: 8px;
-            margin-bottom: 20px; font-size: 0.85rem; border-left: 4px solid var(--accent);
+        .progress-bar-wrap {
+            width: 300px; height: 10px; background: #e2e8f0; border-radius: 5px; margin-top: 10px; overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%; background: var(--accent); width: 0%; transition: width 0.2s ease;
         }
     </style>
 </head>
 <body>
 
 <div id="loadingOverlay">
-    <div style="font-size: 1.5rem; margin-bottom: 10px;">🔄 データを処理中...</div>
+    <div style="font-size: 1.5rem; margin-bottom: 10px;">📈 最新株価・為替を取得中...</div>
     <div id="loadingStatus" style="font-size: 0.9rem; color: #666;">少々お待ちください</div>
+    <div class="progress-bar-wrap"><div id="progressBar" class="progress-bar-fill"></div></div>
 </div>
 
 <div class="container">
@@ -86,7 +88,7 @@
         <div>
             <div class="header-title-wrap">
                 <h1>資産管理ダッシュボード</h1>
-                <span class="version-badge">v5.0 (専用対応版)</span>
+                <span class="version-badge">v6.0</span>
             </div>
             <div class="total-assets-container">
                 <span style="font-size: 0.9rem; color: #666; font-weight: bold;">総資産額:</span>
@@ -98,11 +100,6 @@
             CSVを読み込む<input type="file" id="csvFile" accept=".csv">
         </label>
     </header>
-
-    <div class="notice-box" id="infoNotice">
-        💡 <strong>「ポートフォリオアプリ」形式のCSVに完全対応しました。</strong><br>
-        預り金・保険・外貨・株式・暗号資産などを自動判定して表示します。
-    </div>
 
     <div class="dashboard-grid">
         <div class="card">
@@ -139,13 +136,13 @@
 
 <script>
     let globalTotalAsset = 0;
-    let usdJpyRate = 150.0;
+    let usdJpyRate = 155.0;
     let chartInstances = {};
 
     document.getElementById('csvFile').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        showLoading(true, "CSVファイルを解析中...");
+        showLoading(true, "CSVファイルを解析中...", 0);
 
         const reader = new FileReader();
         reader.onload = function(evt) {
@@ -167,9 +164,10 @@
         reader.readAsArrayBuffer(file);
     });
 
-    function showLoading(show, text = "") {
+    function showLoading(show, text = "", percent = 0) {
         document.getElementById('loadingOverlay').style.display = show ? 'flex' : 'none';
         if (text) document.getElementById('loadingStatus').textContent = text;
+        document.getElementById('progressBar').style.width = percent + '%';
     }
 
     function parseNum(val) {
@@ -178,53 +176,72 @@
         return Number(cleaned) || 0;
     }
 
-    async function fetchUsdJpy() {
+    async function fetchWithTimeout(url, timeoutMs = 6000) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
         try {
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/USDJPY=X?interval=1d&range=1d`;
-            const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const res = await Promise.race([
-                fetch(proxy),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
-            ]);
-            const data = await res.json();
-            const rate = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
-            if (rate && rate > 50) usdJpyRate = rate;
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(id);
+            return response;
         } catch (e) {
-            console.warn("為替取得失敗:", e);
+            clearTimeout(id);
+            throw e;
         }
+    }
+
+    async function fetchJsonWithProxies(targetUrl) {
+        const encodedUrl = encodeURIComponent(targetUrl);
+        const proxies = [
+            `https://api.allorigins.win/raw?url=${encodedUrl}`,
+            `https://corsproxy.io/?${encodedUrl}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodedUrl}`
+        ];
+
+        for (const proxy of proxies) {
+            try {
+                const res = await fetchWithTimeout(proxy, 6000);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data) return data;
+                }
+            } catch (e) {
+                // 次のプロキシへ自動切替
+            }
+        }
+        return null;
+    }
+
+    async function fetchUsdJpy() {
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/USDJPY=X?interval=1d&range=1d`;
+        const data = await fetchJsonWithProxies(targetUrl);
+        const rate = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+        if (rate && rate > 50) usdJpyRate = rate;
         document.getElementById('usdJpyDisplay').textContent = `(適用為替: 1ドル = ${usdJpyRate.toFixed(2)}円)`;
     }
 
     async function fetchStockPrice(code) {
         if (!code) return null;
-        try {
-            let symbol = code.trim();
-            if (/^\d{4}$/.test(symbol)) symbol = `${symbol}.T`;
-            else if (symbol === 'BTC') symbol = 'BTC-JPY';
-            else if (symbol === 'ETH') symbol = 'ETH-JPY';
+        let symbol = code.trim();
+        if (/^\d{4}$/.test(symbol)) symbol = `${symbol}.T`;
+        else if (symbol === 'BTC') symbol = 'BTC-JPY';
+        else if (symbol === 'ETH') symbol = 'ETH-JPY';
 
-            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
-            const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            const res = await Promise.race([
-                fetch(proxy),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
-            ]);
-            const data = await res.json();
-            return data?.chart?.result?.[0]?.meta?.regularMarketPrice || null;
-        } catch (e) {
-            return null;
-        }
+        const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
+        const data = await fetchJsonWithProxies(targetUrl);
+        return data?.chart?.result?.[0]?.meta?.regularMarketPrice || null;
     }
 
     async function processData(data, fields) {
         globalTotalAsset = 0;
         const processedList = [];
 
-        showLoading(true, "最新の為替レートを取得中...");
+        showLoading(true, "最新の為替レートを取得中...", 5);
         await fetchUsdJpy();
 
-        // 日本株・米国株・暗号資産の価格取得を高速並列化
-        const fetchPromises = data.map(async (row) => {
+        const totalRows = data.length;
+
+        for (let i = 0; i < totalRows; i++) {
+            const row = data[i];
             const type = (row['種別'] || 'その他').trim();
             const code = (row['銘柄コード'] || '').trim();
             const name = (row['銘柄・名称'] || '未設定').trim();
@@ -238,60 +255,42 @@
             let status = 'cash';
             let statusLabel = '額面固定';
 
-            // 1. 現金・保険・預り金・確定拠出年金など「数量がそのまま日本円/外貨評価額」のもの
+            const percent = Math.round(((i + 1) / totalRows) * 100);
+
             if (autoFetch === 0 || type.includes('預り金') || type.includes('保険') || type.includes('確定拠出年金')) {
                 status = 'cash';
-                if (currency === 'USD') {
-                    finalValue = qty * usdJpyRate;
-                    statusLabel = '外貨換算';
-                } else {
-                    finalValue = qty;
-                    statusLabel = '額面直接';
-                }
+                finalValue = (currency === 'USD') ? qty * usdJpyRate : qty;
+                statusLabel = (currency === 'USD') ? '外貨換算' : '額面直接';
             } 
-            // 2. 投資信託（銘柄コードなし、自動取得=1）の場合
             else if (type.includes('投資信託') && !code) {
-                // 投資信託の数量は「基準価額（通常1万口単位）」または概算口数
-                // 銘柄コードがないため直接金額または簡易推定処理
-                finalValue = qty; // 投資信託の数量が円換算で入力されている場合の互換、または口数
+                finalValue = qty;
                 status = 'warn';
                 statusLabel = '数量ダイレクト';
             }
-            // 3. 株式・ETF・暗号資産など（銘柄コードあり）
             else if (code && qty > 0) {
-                showLoading(true, `価格取得中: ${name}`);
+                showLoading(true, `[${i+1}/${totalRows}] 株価取得中: ${name} (${code})`, percent);
                 unitPrice = await fetchStockPrice(code);
                 
                 if (unitPrice !== null) {
                     status = 'auto';
                     statusLabel = 'WEB自動';
-                    if (currency === 'USD') {
-                        finalValue = unitPrice * qty * usdJpyRate;
-                    } else {
-                        finalValue = unitPrice * qty;
-                    }
+                    finalValue = (currency === 'USD') ? unitPrice * qty * usdJpyRate : unitPrice * qty;
                 } else {
-                    // API取得失敗時のフォールバック: 数量を暫定評価額とする
                     finalValue = qty;
                     status = 'warn';
                     statusLabel = '取得失敗(数量表示)';
                 }
+                await new Promise(resolve => setTimeout(resolve, 100));
             } else {
                 finalValue = qty;
             }
 
-            return {
+            processedList.push({
                 type, code, name, account, qty, currency, unitPrice, finalValue, status, statusLabel
-            };
-        });
+            });
+        }
 
-        const results = await Promise.all(fetchPromises);
-
-        results.forEach(item => {
-            globalTotalAsset += item.finalValue;
-            processedList.push(item);
-        });
-
+        processedList.forEach(item => globalTotalAsset += item.finalValue);
         document.getElementById('totalAmountDisplay').textContent = '¥' + Math.round(globalTotalAsset).toLocaleString();
         renderTable(processedList);
         renderCharts(processedList);
@@ -302,11 +301,9 @@
         tbody.innerHTML = "";
         data.forEach(item => {
             const tr = document.createElement("tr");
-            
-            let priceText = '-';
-            if (item.unitPrice !== null) {
-                priceText = (item.currency === 'USD' ? '$' : '¥') + item.unitPrice.toLocaleString(undefined, {maximumFractionDigits: 2});
-            }
+            let priceText = (item.unitPrice !== null) 
+                ? (item.currency === 'USD' ? '$' : '¥') + item.unitPrice.toLocaleString(undefined, {maximumFractionDigits: 2})
+                : '-';
 
             let badgeClass = 'badge-auto';
             if (item.status === 'cash') badgeClass = 'badge-cash';
