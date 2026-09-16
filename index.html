@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ポートフォリオ管理ダッシュボード</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --primary: #2c3e50;
+            --accent: #3498db;
+            --text-color: #333333;
+            --border-color: #e0e0e0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+
+        .upload-btn {
+            background-color: var(--accent);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .upload-btn:hover {
+            background-color: #2980b9;
+        }
+
+        #csvFile {
+            display: none;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 1.1rem;
+            color: var(--primary);
+            border-bottom: 2px solid var(--bg-color);
+            padding-bottom: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 250px;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: #f8f9fa;
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .badge-auto {
+            background-color: #e8f8f5;
+            color: #1abc9c;
+        }
+
+        .badge-manual {
+            background-color: #fef9e7;
+            color: #f39c12;
+        }
+
+        .number {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>資産管理ダッシュボード</h1>
+        <label class="upload-btn">
+            CSVを読み込む
+            <input type="file" id="csvFile" accept=".csv">
+        </label>
+    </header>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <h2>種別ごとの資産構成</h2>
+            <div class="chart-container">
+                <canvas id="typeChart"></canvas>
+            </div>
+        </div>
+        <div class="card">
+            <h2>口座ごとの資産構成</h2>
+            <div class="chart-container">
+                <canvas id="accountChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>資産明細</h2>
+        <div class="table-container">
+            <table id="assetTable">
+                <thead>
+                    <tr>
+                        <th>種別</th>
+                        <th>銘柄コード</th>
+                        <th>銘柄・名称</th>
+                        <th>口座</th>
+                        <th class="number">数量 / 時価</th>
+                        <th>通貨</th>
+                        <th>取得モード</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- JSで挿入 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // デフォルトサンプルデータ
+    const defaultCsv = `種別,銘柄コード,銘柄・名称,口座,数量,通貨,自動取得
+国内株式,1540,純金上場信託,楽天証券（智美）_特定,70,JPY,1
+国内株式,2702,日本マクドナルドＨＬＤG,楽天証券（智美）_特定,100,JPY,1
+米国株式,V,ビザ,楽天証券（智美）_特定,35,USD,1
+投資信託,,eMAXIS Slim 全世界株式(オール・カントリー),楽天証券（智美）_NISAつみたて投資枠,995557,JPY,1
+預り金,,日本円,楽天証券（智美）,241184,JPY,0
+貯蓄型保険（元本保証）,,アフラック終身保険　元本保証,アフラック（和俊）,6015197,JPY,0`;
+
+    let typeChartInstance = null;
+    let accountChartInstance = null;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        parseAndRender(defaultCsv);
+
+        document.getElementById('csvFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        renderDashboard(results.data);
+                    }
+                });
+            }
+        });
+    });
+
+    function parseAndRender(csvString) {
+        Papa.parse(csvString, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                renderDashboard(results.data);
+            }
+        });
+    }
+
+    function renderDashboard(data) {
+        renderTable(data);
+        renderCharts(data);
+    }
+
+    function renderTable(data) {
+        const tbody = document.querySelector("#assetTable tbody");
+        tbody.innerHTML = "";
+
+        data.forEach(row => {
+            const tr = document.createElement("tr");
+            const isAuto = row['自動取得'] == '1';
+            const badgeClass = isAuto ? 'badge-auto' : 'badge-manual';
+            const badgeText = isAuto ? '時価自動取得' : '固定/手動入力';
+
+            tr.innerHTML = `
+                <td>${row['種別'] || ''}</td>
+                <td>${row['銘柄コード'] || '-'}</td>
+                <td><strong>${row['銘柄・名称'] || ''}</strong></td>
+                <td>${row['口座'] || ''}</td>
+                <td class="number">${Number(row['数量'] || 0).toLocaleString()}</td>
+                <td>${row['通貨'] || ''}</td>
+                <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderCharts(data) {
+        // 種別集計
+        const typeTotals = {};
+        const accountTotals = {};
+
+        data.forEach(row => {
+            const type = row['種別'] || 'その他';
+            const account = row['口座'] || 'その他';
+            // ダミー簡易計算 (自動取得1の場合は仮単価を適用、0の場合はそのまま金額)
+            const val = Number(row['数量'] || 0);
+
+            typeTotals[type] = (typeTotals[type] || 0) + val;
+            accountTotals[account] = (accountTotals[account] || 0) + val;
+        });
+
+        // チャート色
+        const colors = ['#3498db', '#2ecc71', '#e74c3c', '#f1c40f', '#9b59b6', '#34495e', '#1abc9c'];
+
+        // 種別チャート
+        if (typeChartInstance) typeChartInstance.destroy();
+        const ctx1 = document.getElementById('typeChart').getContext('2d');
+        typeChartInstance = new Chart(ctx1, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(typeTotals),
+                datasets: [{
+                    data: Object.values(typeTotals),
+                    backgroundColor: colors
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // 口座チャート
+        if (accountChartInstance) accountChartInstance.destroy();
+        const ctx2 = document.getElementById('accountChart').getContext('2d');
+        accountChartInstance = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(accountTotals),
+                datasets: [{
+                    data: Object.values(accountTotals),
+                    backgroundColor: colors
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
