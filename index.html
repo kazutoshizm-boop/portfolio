@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <!-- ========================================================= -->
-<!-- 資産管理ダッシュボード App Version: v1.2.0 (2026-09-16)   -->
-<!--  - 個別株（ティッカーあり）: Yahoo! Finance 直接APIで高速取得 -->
-<!--  - 投資信託等（ティッカーなし）: 中継サーバーへ自動振り分け  -->
+<!-- 資産管理ダッシュボード App Version: v1.4.0 (2026-09-16)   -->
+<!--  - ハードコード基準価格（mockPrices）の完全削除             -->
+<!--  - 価格データのローカルストレージキャッシュ化 (取得日保存)  -->
+<!--  - 通信失敗の完全可視化 (警告バッジ・エラー表示)           -->
 <!-- ========================================================= -->
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資産管理ダッシュボード v1.2.0</title>
+    <title>資産管理ダッシュボード v1.4.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
@@ -20,8 +21,8 @@
             --text-color: #333333;
             --border-color: #e0e0e0;
             --success-color: #2ec4b6;
-            --warning-color: #ff9f1c;
-            --info-color: #e71d36;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
         }
 
         body {
@@ -50,6 +51,12 @@
             gap: 15px;
         }
 
+        .header-left {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
         .header-title-wrap {
             display: flex;
             align-items: baseline;
@@ -75,7 +82,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-top: 8px;
+            margin-top: 5px;
         }
 
         .total-label {
@@ -108,36 +115,72 @@
             background-color: #f0f0f0;
         }
 
+        .header-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
         .upload-btn {
             background-color: var(--accent);
             color: white;
-            padding: 10px 20px;
+            padding: 10px 18px;
             border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
             transition: background 0.2s;
             display: inline-block;
+            font-size: 0.9rem;
         }
 
         .upload-btn:hover {
             background-color: #2980b9;
         }
 
+        .clear-btn {
+            background-color: #94a3b8;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+        }
+
+        .clear-btn:hover {
+            background-color: #64748b;
+        }
+
         #csvFile {
             display: none;
         }
 
-        .loading-banner {
+        .status-banner {
             display: none;
-            background-color: #e0f2fe;
-            color: #0369a1;
             padding: 12px 20px;
             border-radius: 8px;
             margin-bottom: 20px;
             font-weight: bold;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             align-items: center;
-            gap: 10px;
+            justify-content: space-between;
+        }
+
+        .status-loading {
+            background-color: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .status-saved {
+            background-color: #dcfce7;
+            color: #15803d;
+        }
+
+        .status-warning {
+            background-color: #fef3c7;
+            color: #92400e;
         }
 
         .dashboard-grid {
@@ -204,13 +247,23 @@
         }
 
         .badge-fast {
+            background-color: #dcfce7;
+            color: #15803d;
+        }
+
+        .badge-proxy {
             background-color: #e0f2fe;
             color: #0369a1;
         }
 
-        .badge-proxy {
+        .badge-cached {
             background-color: #fef3c7;
-            color: #92400e;
+            color: #b45309;
+        }
+
+        .badge-error {
+            background-color: #fee2e2;
+            color: #991b1b;
         }
 
         .badge-manual {
@@ -221,6 +274,11 @@
         .number {
             text-align: right;
             font-variant-numeric: tabular-nums;
+        }
+
+        .text-error {
+            color: var(--danger-color);
+            font-weight: bold;
         }
 
         .val-hidden {
@@ -235,7 +293,7 @@
         <div class="header-left">
             <div class="header-title-wrap">
                 <h1>資産管理ダッシュボード</h1>
-                <span class="version-badge">v1.2.0 (高速ハイブリッド対応)</span>
+                <span class="version-badge">v1.4.0 (通信エラー・キャッシュ厳密化)</span>
             </div>
             <div class="total-assets-container">
                 <span class="total-label">総資産額:</span>
@@ -243,15 +301,16 @@
                 <button id="toggleMaskBtn" class="toggle-btn" title="表示/非表示切替">👁️</button>
             </div>
         </div>
-        <label class="upload-btn">
-            CSVを読み込む
-            <input type="file" id="csvFile" accept=".csv">
-        </label>
+        <div class="header-controls">
+            <label class="upload-btn">
+                CSVを読み込む
+                <input type="file" id="csvFile" accept=".csv">
+            </label>
+            <button id="clearDataBtn" class="clear-btn" title="保存されたデータを消去">データをクリア</button>
+        </div>
     </header>
 
-    <div id="loadingBanner" class="loading-banner">
-        ⏳ データを取得中...（個別株: Yahoo! Finance API / 投資信託: 中継サーバーへ自動振り分け）
-    </div>
+    <div id="statusBanner" class="status-banner"></div>
 
     <div class="dashboard-grid">
         <div class="card">
@@ -282,7 +341,7 @@
                         <th class="number">現在単価</th>
                         <th class="number">時価評価額(円)</th>
                         <th>通貨</th>
-                        <th>取得ルート</th>
+                        <th>取得ステータス</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -299,25 +358,26 @@
     let globalTotalAsset = 0;
     let currentParsedData = [];
 
-    // オフライン用・フォールバック用参考価格テーブル
-    const mockPrices = {
-        '1540': 11200, '2702': 6100, '2914': 4150, '3003': 1480, '3387': 1050,
-        '3418': 1320, '4188': 890, '4661': 4300, '5020': 780, '5201': 5400,
-        '6098': 9200, '6506': 5800, '6701': 11500, '7203': 2850, '8306': 1550,
-        'V': 280 * 155, 'BAC': 40 * 155, 'EPI': 48 * 155, 'GOOG': 180 * 155,
-        'JPM': 210 * 155, 'COST': 880 * 155, 'MAR': 260 * 155, 'MSFT': 430 * 155,
-        'TLT': 95 * 155, 'BTC': 9000000, 'ETH': 400000
-    };
+    const STORAGE_KEY = 'portfolio_csv_data_v1';
+    const PRICE_CACHE_KEY = 'portfolio_price_cache_v1';
 
     document.addEventListener("DOMContentLoaded", () => {
+        // 1. ローカルストレージにCSVデータがあれば自動で読み込む
+        const savedCsv = localStorage.getItem(STORAGE_KEY);
+        if (savedCsv) {
+            showStatus('💾 保存されたCSVデータを読み込んでいます...', 'status-loading');
+            parseAndProcessCsv(savedCsv, false);
+        }
+
+        // 2. CSVファイルアップロードイベント
         document.getElementById('csvFile').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            showLoading(true);
+            showStatus('⏳ 新しいCSVファイルを処理中...', 'status-loading');
 
             const reader = new FileReader();
-            reader.onload = async function(evt) {
+            reader.onload = function(evt) {
                 const buffer = evt.target.result;
                 let text = "";
 
@@ -327,80 +387,145 @@
                     text = new TextDecoder('shift-jis').decode(buffer);
                 }
 
-                Papa.parse(text, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: async (results) => {
-                        await processAndRender(results.data);
-                        showLoading(false);
-                    }
-                });
+                try {
+                    localStorage.setItem(STORAGE_KEY, text);
+                } catch(e) {
+                    console.warn('ローカルストレージ保存失敗:', e);
+                }
+
+                parseAndProcessCsv(text, true);
             };
             reader.readAsArrayBuffer(file);
         });
 
+        // 3. データ削除ボタン（CSVと価格キャッシュの初期化）
+        document.getElementById('clearDataBtn').addEventListener('click', () => {
+            if (confirm('保存されているCSVデータおよび価格キャッシュを削除しますか？')) {
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.removeItem(PRICE_CACHE_KEY);
+                location.reload();
+            }
+        });
+
+        // 4. マスク切替
         document.getElementById('toggleMaskBtn').addEventListener('click', () => {
             isMasked = !isMasked;
             updateMaskDisplay();
         });
     });
 
-    function showLoading(show) {
-        const banner = document.getElementById('loadingBanner');
-        banner.style.display = show ? 'flex' : 'none';
+    function parseAndProcessCsv(csvText, isNewUpload) {
+        Papa.parse(csvText, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (results) => {
+                const hasErrors = await processAndRender(results.data);
+                
+                if (hasErrors) {
+                    showStatus('⚠️ 一部銘柄のリアルタイム通信に失敗しました。前回取得できたデータまたは通信エラーを表示しています。', 'status-warning');
+                } else {
+                    const msg = isNewUpload ? '✅ CSVデータを正常に読み込み、ローカルストレージに保存しました。' : '✅ データを最新状態で表示しています。';
+                    showStatus(msg, 'status-saved');
+                }
+            }
+        });
     }
 
-    // 銘柄コードから「ティッカーコード（個別株）」かどうかを判定
+    function showStatus(message, typeClass) {
+        const banner = document.getElementById('statusBanner');
+        banner.className = `status-banner ${typeClass}`;
+        banner.innerHTML = message;
+        banner.style.display = 'flex';
+    }
+
+    // 価格キャッシュの取得・更新ヘルパー
+    function getPriceCache() {
+        try {
+            return JSON.parse(localStorage.getItem(PRICE_CACHE_KEY) || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function setPriceCache(code, unitPrice) {
+        try {
+            const cache = getPriceCache();
+            const now = new Date();
+            const dateStr = `${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+            cache[code] = {
+                price: unitPrice,
+                fetchedAt: dateStr
+            };
+            localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(cache));
+        } catch (e) {
+            console.warn('価格キャッシュ保存失敗:', e);
+        }
+    }
+
+    // 銘柄コードから「ティッカーコード（個別株・ETF）」かどうかを判定
     function isTickerCode(code) {
         if (!code) return false;
         const clean = String(code).trim();
-        // 日本株 4桁数字(例: 7203) または 英字(例: BAC, AAPL)
         return /^\d{4}$/.test(clean) || /^[A-Za-z]+$/.test(clean);
     }
 
-    // ハイブリッド価格取得ロジック
+    // 価格取得ロジック（暗黙の基準価格を排除）
     async function fetchPriceForAsset(code, currency, isAuto) {
         if (!isAuto) {
-            return { price: 1, routeName: '手動/固定', routeClass: 'badge-manual' };
+            return { price: 1, routeName: '手動/固定', routeClass: 'badge-manual', error: false };
         }
 
         const cleanCode = String(code || '').trim();
+        const priceCache = getPriceCache();
 
-        // 1. 個別株（ティッカーあり）: Yahoo! Finance API等で高速直接取得
+        // 1. 個別株（ティッカーあり）: API直接通信試行
         if (isTickerCode(cleanCode)) {
-            try {
-                const symbol = /^\d{4}$/.test(cleanCode) ? `${cleanCode}.T` : cleanCode;
-                const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`;
-                
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const symbol = /^\d{4}$/.test(cleanCode) ? `${cleanCode}.T` : cleanCode;
+            const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
+            
+            const proxies = [
+                (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+                (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
+            ];
 
-                const response = await fetch(proxyUrl, { signal: controller.signal });
-                clearTimeout(timeoutId);
+            for (const getProxyUrl of proxies) {
+                try {
+                    const proxyUrl = getProxyUrl(targetUrl);
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-                if (response.ok) {
-                    const json = await response.json();
-                    const marketPrice = json.chart?.result?.[0]?.meta?.regularMarketPrice;
-                    if (marketPrice) {
-                        const usdRate = (currency === 'USD') ? 155 : 1;
-                        return { 
-                            price: marketPrice * usdRate, 
-                            routeName: 'Yahoo! Finance (高速)', 
-                            routeClass: 'badge-fast' 
-                        };
+                    const response = await fetch(proxyUrl, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+
+                    if (response.ok) {
+                        const json = await response.json();
+                        const marketPrice = json.chart?.result?.[0]?.meta?.regularMarketPrice;
+                        if (marketPrice) {
+                            const usdRate = (currency === 'USD') ? 155 : 1;
+                            const finalPrice = marketPrice * usdRate;
+                            
+                            // 通信成功時：ローカルストレージに最新価格を保存
+                            setPriceCache(cleanCode, finalPrice);
+
+                            return { 
+                                price: finalPrice, 
+                                routeName: 'リアルタイム取得', 
+                                routeClass: 'badge-fast',
+                                error: false
+                            };
+                        }
                     }
+                } catch (err) {
+                    console.warn(`[API試行失敗] ${cleanCode}`, err);
                 }
-            } catch (err) {
-                console.warn(`[高速APIスキップ] ${cleanCode}: mock/キャッシュ切り替え`, err);
             }
         } 
-        // 2. 投資信託・その他（ティッカーなし）: 中継サーバー経由
+        // 2. 投資信託など（ティッカーなし）: 中継サーバー通信試行
         else if (cleanCode) {
             try {
                 const proxyServerUrl = `https://your-proxy-server.com/api/fund?code=${encodeURIComponent(cleanCode)}`;
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2500);
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
 
                 const response = await fetch(proxyServerUrl, { signal: controller.signal });
                 clearTimeout(timeoutId);
@@ -408,34 +533,49 @@
                 if (response.ok) {
                     const data = await response.json();
                     if (data && data.price) {
+                        const finalPrice = Number(data.price);
+                        
+                        // 通信成功時：ローカルストレージに最新価格を保存
+                        setPriceCache(cleanCode, finalPrice);
+
                         return { 
-                            price: Number(data.price), 
+                            price: finalPrice, 
                             routeName: '中継サーバー経由', 
-                            routeClass: 'badge-proxy' 
+                            routeClass: 'badge-proxy',
+                            error: false
                         };
                     }
                 }
             } catch (err) {
-                console.warn(`[中継サーバー応答なし] ${cleanCode}: mock価格適用`, err);
+                console.warn(`[中継サーバー応答なし] ${cleanCode}`, err);
             }
         }
 
-        // 3. フォールバック (内蔵参照価格)
-        if (mockPrices[cleanCode]) {
+        // 3. API通信失敗時のフォールバック処理（暗黙の基準値は全削除）
+        // 過去に1度でも正常取得して保存されたデータがある場合
+        if (priceCache[cleanCode]) {
+            const cached = priceCache[cleanCode];
             return { 
-                price: mockPrices[cleanCode], 
-                routeName: isTickerCode(cleanCode) ? 'Yahoo! Finance (参照)' : '中継サーバー (参照)', 
-                routeClass: isTickerCode(cleanCode) ? 'badge-fast' : 'badge-proxy' 
+                price: cached.price, 
+                routeName: `通信失敗 (${cached.fetchedAt}データ)`, 
+                routeClass: 'badge-cached',
+                error: true
             };
         }
 
-        const fallbackUnitPrice = (currency === 'USD') ? 155 : 1;
-        return { price: fallbackUnitPrice, routeName: '基準値', routeClass: 'badge-manual' };
+        // キャッシュすらない場合は完全に通信失敗として0表示
+        return { 
+            price: 0, 
+            routeName: '通信失敗 (取得エラー)', 
+            routeClass: 'badge-error',
+            error: true
+        };
     }
 
     async function processAndRender(data) {
         currentParsedData = [];
         globalTotalAsset = 0;
+        let hasAnyError = false;
 
         const promises = data.map(async (row) => {
             if (!row['種別'] && !row['銘柄・名称']) return null;
@@ -446,6 +586,8 @@
             const currency = String(row['通貨'] || 'JPY').trim();
 
             const priceInfo = await fetchPriceForAsset(code, currency, isAuto);
+            if (priceInfo.error) hasAnyError = true;
+
             const marketValue = isAuto ? (qty * priceInfo.price) : (qty * (currency === 'USD' ? 155 : 1));
 
             return {
@@ -455,7 +597,8 @@
                 marketValue: marketValue,
                 isAuto: isAuto,
                 routeName: priceInfo.routeName,
-                routeClass: priceInfo.routeClass
+                routeClass: priceInfo.routeClass,
+                hasError: priceInfo.error
             };
         });
 
@@ -467,6 +610,8 @@
         updateMaskDisplay();
         renderTable(currentParsedData);
         renderCharts(currentParsedData);
+
+        return hasAnyError;
     }
 
     function updateMaskDisplay() {
@@ -497,13 +642,17 @@
         data.forEach(item => {
             const tr = document.createElement("tr");
 
+            const displayUnitPrice = (!item.isAuto) 
+                ? '-' 
+                : (item.unitPrice === 0 ? '<span class="text-error">取得失敗</span>' : Math.round(item.unitPrice).toLocaleString());
+
             tr.innerHTML = `
                 <td>${item['種別'] || ''}</td>
                 <td>${item['銘柄コード'] || '-'}</td>
                 <td><strong>${item['銘柄・名称'] || ''}</strong></td>
                 <td>${item['口座'] || ''}</td>
                 <td class="number">${item.parsedQty.toLocaleString()}</td>
-                <td class="number">${item.isAuto ? Math.round(item.unitPrice).toLocaleString() : '-'}</td>
+                <td class="number">${displayUnitPrice}</td>
                 <td class="number table-market-val" data-val="${item.marketValue}">${isMasked ? '****' : Math.round(item.marketValue).toLocaleString()}</td>
                 <td>${item['通貨'] || 'JPY'}</td>
                 <td><span class="badge ${item.routeClass}">${item.routeName}</span></td>
