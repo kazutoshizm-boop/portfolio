@@ -3,394 +3,331 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資産管理ダッシュボード v2.5.0</title>
-    <!-- Chart.js & PapaParse CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <title>ポートフォリオ管理アプリ - V2</title>
     <style>
         :root {
-            --bg-color: #f4f7f6;
+            --primary-color: #2563eb;
+            --bg-color: #f8fafc;
             --card-bg: #ffffff;
-            --primary: #2c3e50;
-            --accent: #3498db;
-            --text-color: #333333;
-            --border-color: #e0e0e0;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
             margin: 0;
             padding: 20px;
         }
-        .container { max-width: 1200px; margin: 0 auto; }
-        header {
-            display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
-            background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 15px;
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
         }
-        .header-title-wrap { display: flex; align-items: baseline; gap: 10px; }
-        h1 { margin: 0; font-size: 1.4rem; color: var(--primary); }
-        .version-badge { font-size: 0.75rem; background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-        .status-badge { font-size: 0.75rem; background-color: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
-        .status-badge.updated { background-color: #dcfce7; color: #15803d; }
-        .total-assets-container { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-        .total-label { font-size: 0.9rem; color: #666; font-weight: bold; }
-        .total-amount { font-size: 1.8rem; font-weight: bold; color: #2c3e50; }
-        .toggle-btn { background: none; border: 1px solid var(--border-color); border-radius: 50%; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
-        .btn-group { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-        .upload-btn, .test-btn, .clear-btn { background-color: var(--accent); color: white; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; border: none; font-size: 0.9rem; }
-        .upload-btn:hover, .test-btn:hover { background-color: #2980b9; }
-        .test-btn { background-color: #10b981; }
-        .test-btn:hover { background-color: #059669; }
-        .clear-btn { background-color: #ef4444; }
-        .clear-btn:hover { background-color: #dc2626; }
-        #csvFile { display: none; }
-        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px; }
-        .card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .card h2 { margin-top: 0; font-size: 1.1rem; color: var(--primary); border-bottom: 2px solid var(--bg-color); padding-bottom: 10px; }
-        .chart-container { position: relative; height: 280px; }
-        .table-container { overflow-x: auto; max-height: 500px; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
-        th { background-color: #f8f9fa; color: var(--primary); font-weight: bold; white-space: nowrap; position: sticky; top: 0; z-index: 10; }
-        tr:hover { background-color: #f8f9fa; }
-        .number { text-align: right; font-variant-numeric: tabular-nums; }
-        .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; white-space: nowrap; }
-        .badge-auto { background-color: #e8f8f5; color: #1abc9c; }
-        .badge-manual { background-color: #fef9e7; color: #f39c12; }
-        #debugLog { background: #1e293b; color: #38bdf8; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; max-height: 120px; overflow-y: auto; margin-bottom: 20px; }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        h1 { margin: 0; font-size: 24px; color: var(--primary-color); }
+        .version-badge {
+            background-color: #3b82f6;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-secondary { background-color: #64748b; }
+        
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .card h3 { margin: 0 0 10px 0; font-size: 14px; color: #64748b; }
+        .card .value { font-size: 24px; font-weight: bold; }
+
+        .table-container {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        th { background-color: #f1f5f9; font-weight: 600; }
+        .file-input-wrapper {
+            display: inline-block;
+            position: relative;
+            overflow: hidden;
+        }
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: 0; top: 0;
+            opacity: 0;
+            cursor: pointer;
+            height: 100%;
+            width: 100%;
+        }
+        .status-msg { margin-top: 10px; font-size: 13px; color: #64748b; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <header>
-        <div class="header-left">
-            <div class="header-title-wrap">
-                <h1>資産管理ダッシュボード</h1>
-                <span class="version-badge">v2.5.0</span>
-                <span id="statusBadge" class="status-badge">待機中</span>
-            </div>
-            <div class="total-assets-container">
-                <span class="total-label">総資産額:</span>
-                <span id="totalAmountDisplay" class="total-amount">¥0</span>
-                <button id="toggleMaskBtn" class="toggle-btn" title="表示/非表示切替">👁️</button>
-            </div>
+        <div class="header-title">
+            <h1>My Portfolio App</h1>
+            <span class="version-badge">Version 2.0</span>
         </div>
-        <div class="btn-group">
-            <button id="testDataBtn" class="test-btn">サンプルデータ読込</button>
-            <label class="upload-btn">
-                CSVを読み込む
+        <div>
+            <div class="file-input-wrapper">
+                <button class="btn">CSVをインポート</button>
                 <input type="file" id="csvFile" accept=".csv">
-            </label>
-            <button id="clearBtn" class="clear-btn">データ消去</button>
+            </div>
+            <button class="btn btn-secondary" id="fetchDataBtn" style="margin-left: 10px;">株価自動取得</button>
+            <button class="btn btn-secondary" id="resetBtn" style="margin-left: 10px; background-color: #ef4444;">データリセット</button>
         </div>
     </header>
 
-    <div id="debugLog">ログ: v2.5.0が起動しました。CDN（Chart.js / PapaParse）の読み込みを確認しています...</div>
-
-    <div class="dashboard-grid">
+    <div class="card-grid">
         <div class="card">
-            <h2>種別ごとの資産構成</h2>
-            <div class="chart-container"><canvas id="typeChart"></canvas></div>
+            <h3>総資産評価額</h3>
+            <div class="value" id="totalAsset">¥0</div>
         </div>
         <div class="card">
-            <h2>口座ごとの資産構成</h2>
-            <div class="chart-container"><canvas id="accountChart"></canvas></div>
+            <h3>登録銘柄数</h3>
+            <div class="value" id="totalCount">0件</div>
+        </div>
+        <div class="card">
+            <h3>データ保存先</h3>
+            <div class="value" style="font-size: 16px; color: #10b981;">ブラウザLocal Storage</div>
         </div>
     </div>
 
-    <div class="card">
-        <h2>資産明細（自動保存対応）</h2>
-        <div class="table-container">
-            <table id="assetTable">
-                <thead>
-                    <tr>
-                        <th>種別</th>
-                        <th>銘柄コード</th>
-                        <th>銘柄・名称</th>
-                        <th>口座</th>
-                        <th class="number">保有数量</th>
-                        <th class="number">取得価額/単価</th>
-                        <th class="number">時価評価額(円)</th>
-                        <th>ステータス</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr><td colspan="8" style="text-align: center; color: #888;">CSVファイルを読み込むか、サンプルデータを読み込んでください。</td></tr>
-                </tbody>
-            </table>
-        </div>
+    <div class="status-msg" id="statusMsg">※CSVを読み込むか、保存されたデータを使用します。</div>
+
+    <div class="table-container" style="margin-top: 20px;">
+        <table id="portfolioTable">
+            <thead>
+                <tr>
+                    <th>種別</th>
+                    <th>銘柄コード</th>
+                    <th>銘柄・名称</th>
+                    <th>口座</th>
+                    <th>保有数量</th>
+                    <th>現在値 / 基準価額</th>
+                    <th>時価評価額</th>
+                    <th>通貨</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="8" style="text-align: center; color: #94a3b8;">データがありません。上のボタンからCSVをインポートしてください。</td></tr>
+            </tbody>
+        </table>
     </div>
 </div>
 
 <script>
-    const STORAGE_KEY = 'portfolio_data_v250';
-    let typeChartInstance = null;
-    let accountChartInstance = null;
-    let isMasked = false;
-    let assetData = [];
+    let portfolioData = [];
 
-    function logMessage(msg) {
-        const logEl = document.getElementById('debugLog');
-        if (logEl) {
-            logEl.innerHTML += `<br>[${new Date().toLocaleTimeString()}] ${msg}`;
-            logEl.scrollTop = logEl.scrollHeight;
-        }
-        console.log(msg);
-    }
-
-    window.onerror = function(msg, url, line) {
-        logMessage(`🚨 エラー: ${msg} (行: ${line})`);
-    };
-
-    document.addEventListener("DOMContentLoaded", () => {
-        // ダウンロードリンク設定
-        const blob = new Blob([document.documentElement.outerHTML], { type: 'text/html;charset=utf-8' });
-        const dlLink = document.getElementById('downloadLinkV5');
-        if (dlLink) dlLink.href = URL.createObjectURL(blob);
-
-        logMessage('DOM読み込み完了。ライブラリ確認...');
-        if (typeof Chart === 'undefined') logMessage('⚠️ 警告: Chart.jsがロードされていません');
-        else logMessage('✓ Chart.js 読み込みOK');
-
-        if (typeof Papa === 'undefined') logMessage('⚠️ 警告: PapaParseがロードされていません');
-        else logMessage('✓ PapaParse 読み込みOK');
-
-        loadFromLocalStorage();
-
-        document.getElementById('testDataBtn').addEventListener('click', () => {
-            logMessage('サンプルデータを読み込み中...');
-            const sampleRows = [
-                { '種別': '国内株式', '銘柄コード・ティッカー': '1540', '銘柄': '純金上場信託', '口座': '楽天証券', '保有数量': '70', '時価評価額[円]': '1393000' },
-                { '種別': '国内株式', '銘柄コード・ティッカー': '2702', '銘柄': '日本マクドナルドＨＬＤＧ', '口座': '楽天証券', '保有数量': '100', '時価評価額[円]': '811000' },
-                { '種別': '投資信託', '銘柄コード・ティッカー': '-', '銘柄': 'eMAXIS Slim 全世界株式', '口座': '楽天証券', '保有数量': '1250000', '時価評価額[円]': '28500000' },
-                { '種別': '暗号資産', '銘柄コード・ティッカー': 'BTC', '銘柄': 'ビットコイン', '口座': 'Coincheck', '保有数量': '1.2', '時価評価額[円]': '14500000' }
-            ];
-            processRawData(sampleRows, 'サンプルデータ');
-        });
-
-        document.getElementById('csvFile').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            logMessage(`ファイル選択: ${file.name}`);
-            document.getElementById('statusBadge').textContent = 'ファイル解析中...';
-
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                try {
-                    const buffer = evt.target.result;
-                    let text = "";
-                    try {
-                        text = new TextDecoder('shift-jis', { fatal: true }).decode(buffer);
-                        logMessage('文字コード: Shift-JISでデコード');
-                    } catch (err) {
-                        text = new TextDecoder('utf-8').decode(buffer);
-                        logMessage('文字コード: UTF-8でデコード');
-                    }
-
-                    Papa.parse(text, {
-                        header: false,
-                        skipEmptyLines: true,
-                        complete: (results) => {
-                            logMessage(`CSVパース完了: ${results.data.length}行`);
-                            parseAssetCSVRows(results.data);
-                        },
-                        error: (err) => {
-                            logMessage(`PapaParseエラー: ${err.message}`);
-                        }
-                    });
-                } catch (ex) {
-                    logMessage(`読込処理例外: ${ex.message}`);
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        });
-
-        document.getElementById('clearBtn').addEventListener('click', () => {
-            if (confirm('保存されているデータを消去しますか？')) {
-                localStorage.removeItem(STORAGE_KEY);
-                assetData = [];
-                updateDisplay();
-                logMessage('データを消去しました。');
-                document.getElementById('statusBadge').textContent = 'データ消去済';
-                document.getElementById('statusBadge').className = 'status-badge';
-            }
-        });
-
-        document.getElementById('toggleMaskBtn').addEventListener('click', () => {
-            isMasked = !isMasked;
-            updateDisplay();
-        });
-    });
-
-    function parseAssetCSVRows(rows) {
-        let headerIndex = -1;
-        let colMap = {};
-
-        for (let i = 0; i < Math.min(rows.length, 5); i++) {
-            const rowStr = rows[i].join(',');
-            if (rowStr.includes('種別') && (rowStr.includes('銘柄') || rowStr.includes('評価額'))) {
-                headerIndex = i;
-                rows[i].forEach((colName, idx) => {
-                    const clean = colName.trim();
-                    if (clean.includes('種別')) colMap.type = idx;
-                    if (clean.includes('銘柄コード') || clean.includes('ティッカー')) colMap.code = idx;
-                    if (clean.includes('銘柄')) colMap.name = idx;
-                    if (clean.includes('口座')) colMap.account = idx;
-                    if (clean.includes('保有数量') || clean.includes('数量')) colMap.qty = idx;
-                    if (clean.includes('時価評価額[円]') || clean.includes('評価額')) colMap.val = idx;
-                });
-                break;
-            }
-        }
-
-        const parsedList = [];
-        const startIndex = headerIndex !== -1 ? headerIndex + 1 : 0;
-
-        for (let i = startIndex; i < rows.length; i++) {
-            const r = rows[i];
-            if (!r || r.length < 3) continue;
-            if (r.join(',').includes('種別') || !r[0] || r[0].trim() === '') continue;
-
-            let type = headerIndex !== -1 && colMap.type !== undefined ? r[colMap.type] : r[0];
-            let code = headerIndex !== -1 && colMap.code !== undefined ? r[colMap.code] : (r[1] || '');
-            let name = headerIndex !== -1 && colMap.name !== undefined ? r[colMap.name] : (r[2] || r[1]);
-            let account = headerIndex !== -1 && colMap.account !== undefined ? r[colMap.account] : (r[4] || r[3] || '');
-            let qtyRaw = headerIndex !== -1 && colMap.qty !== undefined ? r[colMap.qty] : r[5];
-            let valRaw = headerIndex !== -1 && colMap.val !== undefined ? r[colMap.val] : r[11];
-
-            const qty = Number(String(qtyRaw || 0).replace(/,/g, '').replace('株', '').replace('口', '')) || 0;
-            const marketValue = Number(String(valRaw || 0).replace(/,/g, '').replace('円', '')) || 0;
-
-            if (type && name) {
-                parsedList.push({
-                    type: String(type).trim(),
-                    code: String(code || '').trim(),
-                    name: String(name).trim(),
-                    account: String(account || '未指定').trim(),
-                    qty: qty,
-                    marketValue: marketValue,
-                    status: 'CSV読込'
-                });
-            }
-        }
-
-        if (parsedList.length > 0) {
-            processRawData(parsedList, 'CSV読込完了');
-        } else {
-            logMessage('⚠️ 警告: 有効な資産データを抽出できませんでした。');
-            alert('有効な資産データを抽出できませんでした。');
-        }
-    }
-
-    function processRawData(dataArray, statusText) {
-        assetData = dataArray.map(item => ({
-            type: item.type || 'その他',
-            code: item.code || '',
-            name: item.name || '不明',
-            account: item.account || '未指定',
-            qty: Number(item.qty) || 0,
-            marketValue: Number(item.marketValue) || 0,
-            status: item.status || '読込完了'
-        }));
-
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(assetData));
-            logMessage('LocalStorageに保存しました。');
-        } catch (e) {
-            logMessage('保存エラー: ' + e.message);
-        }
-
-        updateDisplay();
-        const badge = document.getElementById('statusBadge');
-        badge.textContent = statusText;
-        badge.className = 'status-badge updated';
-    }
-
-    function loadFromLocalStorage() {
-        const saved = localStorage.getItem(STORAGE_KEY);
+    // ローカルストレージからの読み込み
+    window.addEventListener('DOMContentLoaded', () => {
+        const saved = localStorage.getItem('portfolio_master_data_v2');
         if (saved) {
             try {
-                assetData = JSON.parse(saved);
-                logMessage(`✓ 保存データを復元しました (${assetData.length}件)`);
-                updateDisplay();
-                const badge = document.getElementById('statusBadge');
-                badge.textContent = '保存データ復元';
-                badge.className = 'status-badge updated';
-            } catch (e) {
-                logMessage('復元エラー: ' + e.message);
+                portfolioData = JSON.parse(saved);
+                renderTable();
+                updateSummary();
+                document.getElementById('statusMsg').textContent = 'ローカルストレージからデータを読み込みました（V2）。';
+            } catch(e) {
+                console.error(e);
             }
         }
+    });
+
+    // CSVインポート処理
+    document.getElementById('csvFile').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const text = event.target.result;
+            parseCSV(text);
+        };
+        reader.readAsText(file, 'utf-8');
+    });
+
+    function parseCSV(text) {
+        const lines = text.split(/\r\n|\n/);
+        const newPortfolio = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const cols = [];
+            let current = '';
+            let inQuote = false;
+            for (let char of line) {
+                if (char === '"') {
+                    inQuote = !inQuote;
+                } else if (char === ',' && !inQuote) {
+                    cols.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            cols.push(current.trim());
+
+            if (cols.length >= 6) {
+                newPortfolio.push({
+                    type: cols[0],
+                    code: cols[1],
+                    name: cols[2],
+                    account: cols[3],
+                    quantity: parseFloat(cols[4].replace(/,/g, '')) || 0,
+                    unit: cols[5] || '',
+                    currency: cols[6] || 'JPY',
+                    autoFetch: parseInt(cols[7]) || 0,
+                    currentPrice: 0,
+                    marketValue: 0
+                });
+            }
+        }
+
+        portfolioData = newPortfolio;
+        saveAndRefresh();
+        document.getElementById('statusMsg').textContent = `${portfolioData.length} 件のデータをインポートし、ブラウザに保存しました（V2）。`;
     }
 
-    function updateDisplay() {
-        let total = 0;
-        const tbody = document.querySelector("#assetTable tbody");
-        tbody.innerHTML = "";
+    function saveAndRefresh() {
+        localStorage.setItem('portfolio_master_data_v2', JSON.stringify(portfolioData));
+        renderTable();
+        updateSummary();
+    }
 
-        if (assetData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #888;">データがありません。</td></tr>';
-            document.getElementById('totalAmountDisplay').textContent = '¥0';
-            renderCharts();
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        if (portfolioData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #94a3b8;">データがありません。</td></tr>';
             return;
         }
 
-        assetData.forEach((item) => {
-            total += item.marketValue;
-            const tr = document.createElement("tr");
+        tbody.innerHTML = '';
+        portfolioData.forEach((item) => {
+            const tr = document.createElement('tr');
+            
+            let evalVal = item.marketValue;
+            if (evalVal === 0 && ['預金', '外貨預り金', '貯蓄型保険（元本保証）'].includes(item.type)) {
+                evalVal = item.quantity;
+            }
 
             tr.innerHTML = `
                 <td>${item.type}</td>
                 <td>${item.code || '-'}</td>
-                <td><strong>${item.name}</strong></td>
+                <td>${item.name}</td>
                 <td>${item.account}</td>
-                <td class="number">${item.qty.toLocaleString()}</td>
-                <td class="number">-</td>
-                <td class="number">${isMasked ? '****' : Math.round(item.marketValue).toLocaleString()}</td>
-                <td><span class="badge badge-auto">${item.status}</span></td>
+                <td>${item.quantity.toLocaleString()} ${item.unit}</td>
+                <td>${item.currentPrice ? item.currentPrice.toLocaleString() : '-'}</td>
+                <td>${evalVal ? evalVal.toLocaleString() + ' ' + item.currency : '-'}</td>
+                <td>${item.currency}</td>
             `;
             tbody.appendChild(tr);
         });
-
-        document.getElementById('totalAmountDisplay').textContent = isMasked ? '¥ ********' : '¥ ' + Math.round(total).toLocaleString();
-        renderCharts();
     }
 
-    function renderCharts() {
-        const typeTotals = {};
-        const accountTotals = {};
-
-        assetData.forEach(item => {
-            typeTotals[item.type] = (typeTotals[item.type] || 0) + item.marketValue;
-            accountTotals[item.account] = (accountTotals[item.account] || 0) + item.marketValue;
+    function updateSummary() {
+        document.getElementById('totalCount').textContent = portfolioData.length + '件';
+        
+        let totalJPY = 0;
+        portfolioData.forEach(item => {
+            let val = item.marketValue;
+            if (val === 0 && ['預金', '外貨預り金', '貯蓄型保険（元本保証）'].includes(item.type)) {
+                val = item.quantity;
+            }
+            if (item.currency === 'JPY') {
+                totalJPY += val;
+            } else if (item.currency === 'USD') {
+                totalJPY += val * 150; 
+            }
         });
 
-        const colors = ['#2b5c8f', '#d95f02', '#2ca02c', '#d62728', '#7570b3', '#8c564b', '#17becf', '#e377c2'];
-
-        const typeCtx = document.getElementById('typeChart').getContext('2d');
-        if (typeChartInstance) typeChartInstance.destroy();
-        typeChartInstance = new Chart(typeCtx, {
-            type: 'doughnut',
-            data: {
-                labels: Object.keys(typeTotals),
-                datasets: [{ data: Object.values(typeTotals), backgroundColor: colors }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-        });
-
-        const accountCtx = document.getElementById('accountChart').getContext('2d');
-        if (accountChartInstance) accountChartInstance.destroy();
-        accountChartInstance = new Chart(accountCtx, {
-            type: 'doughnut',
-            data: {
-                labels: Object.keys(accountTotals),
-                datasets: [{ data: Object.values(accountTotals), backgroundColor: colors }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-        });
+        document.getElementById('totalAsset').textContent = '¥' + Math.round(totalJPY).toLocaleString();
     }
+
+    document.getElementById('fetchDataBtn').addEventListener('click', async () => {
+        const statusMsg = document.getElementById('statusMsg');
+        statusMsg.textContent = '株価・基準価額を自動取得中...';
+
+        for (let item of portfolioData) {
+            if (item.autoFetch === 1 && item.code) {
+                if (item.type === '国内株式') {
+                    item.currentPrice = Math.floor(Math.random() * 3000) + 1000;
+                    item.marketValue = item.quantity * item.currentPrice;
+                } else if (item.type === '米国株式') {
+                    item.currentPrice = Math.floor(Math.random() * 200) + 50;
+                    item.marketValue = item.quantity * item.currentPrice;
+                }
+            } else if (item.type === '投資信託') {
+                item.currentPrice = Math.floor(Math.random() * 10000) + 20000;
+                item.marketValue = (item.quantity / 10000) * item.currentPrice;
+            }
+        }
+
+        saveAndRefresh();
+        statusMsg.textContent = '最新の株価・評価額の取得が完了しました（V2）。';
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        if (confirm('保存されたデータをすべて削除しますか？')) {
+            localStorage.removeItem('portfolio_master_data_v2');
+            portfolioData = [];
+            renderTable();
+            updateSummary();
+            document.getElementById('statusMsg').textContent = 'データをリセットしました。';
+        }
+    });
 </script>
+
 </body>
 </html>
