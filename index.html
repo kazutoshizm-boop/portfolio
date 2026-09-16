@@ -1,9 +1,12 @@
 <!DOCTYPE html>
+<!-- ========================================================= -->
+<!-- 資産管理ダッシュボード App Version: v1.1.0 (2026-09-16)   -->
+<!-- ========================================================= -->
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資産管理ダッシュボード</title>
+    <title>資産管理ダッシュボード v1.1.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
@@ -42,16 +45,32 @@
             gap: 15px;
         }
 
+        .header-title-wrap {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+
         .header-left h1 {
-            margin: 0 0 8px 0;
+            margin: 0;
             font-size: 1.4rem;
             color: var(--primary);
+        }
+
+        .version-badge {
+            font-size: 0.75rem;
+            background-color: #e2e8f0;
+            color: #475569;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
         }
 
         .total-assets-container {
             display: flex;
             align-items: center;
             gap: 10px;
+            margin-top: 8px;
         }
 
         .total-label {
@@ -190,7 +209,10 @@
 <div class="container">
     <header>
         <div class="header-left">
-            <h1>資産管理ダッシュボード</h1>
+            <div class="header-title-wrap">
+                <h1>資産管理ダッシュボード</h1>
+                <span class="version-badge">v1.1.0</span>
+            </div>
             <div class="total-assets-container">
                 <span class="total-label">総資産額:</span>
                 <span id="totalAmountDisplay" class="total-amount">¥0</span>
@@ -249,7 +271,7 @@
     let globalTotalAsset = 0;
     let currentParsedData = [];
 
-    // 参考価格テーブル（単価データの取得用）
+    // 参考価格テーブル
     const mockPrices = {
         '1540': 11200, '2702': 6100, '2914': 4150, '3003': 1480, '3387': 1050,
         '3418': 1320, '4188': 890, '4661': 4300, '5020': 780, '5201': 5400,
@@ -310,9 +332,9 @@
                 if (mockPrices[code]) {
                     unitPrice = mockPrices[code];
                 } else if (currency === 'USD') {
-                    unitPrice = 155; // 簡易ドル換算レート
+                    unitPrice = 155;
                 } else {
-                    unitPrice = 1; // 投信等のそのまま数値時価
+                    unitPrice = 1;
                 }
                 marketValue = qty * unitPrice;
             } else {
@@ -350,7 +372,6 @@
             btnEl.textContent = '👁️';
         }
 
-        // テーブル内の時価表示も目隠し同期
         const priceCells = document.querySelectorAll('.table-market-val');
         priceCells.forEach(cell => {
             const val = Number(cell.getAttribute('data-val'));
