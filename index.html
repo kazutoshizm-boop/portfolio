@@ -1,13 +1,9 @@
 <!DOCTYPE html>
-<!-- ========================================================= -->
-<!-- 資産管理ダッシュボード App Version: v1.6.0 (2026-09-16)   -->
-<!--  - 株価取得エンジンを安定版 (Stooq API) に刷新             -->
-<!-- ========================================================= -->
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資産管理ダッシュボード v1.6.0</title>
+    <title>資産管理ダッシュボード v2.1.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
@@ -18,9 +14,7 @@
             --accent: #3498db;
             --text-color: #333333;
             --border-color: #e0e0e0;
-            --danger-color: #ef4444;
         }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: var(--bg-color);
@@ -28,186 +22,37 @@
             margin: 0;
             padding: 20px;
         }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
+        .container { max-width: 1200px; margin: 0 auto; }
         header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            flex-wrap: wrap;
-            gap: 15px;
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+            background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 15px;
         }
-
-        .header-left {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .header-title-wrap {
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-        }
-
-        .header-left h1 {
-            margin: 0;
-            font-size: 1.4rem;
-            color: var(--primary);
-        }
-
-        .version-badge {
-            font-size: 0.75rem;
-            background-color: #10b981;
-            color: #ffffff;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-weight: bold;
-        }
-
-        .total-assets-container {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 5px;
-        }
-
-        .total-label {
-            font-size: 0.9rem;
-            color: #666;
-            font-weight: bold;
-        }
-
-        .total-amount {
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: #2c3e50;
-        }
-
-        .toggle-btn {
-            background: none;
-            border: 1px solid var(--border-color);
-            border-radius: 50%;
-            width: 36px;
-            height: 36px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.1rem;
-        }
-
-        .header-controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .upload-btn {
-            background-color: var(--accent);
-            color: white;
-            padding: 10px 18px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 0.9rem;
-        }
-
-        .clear-btn {
-            background-color: #94a3b8;
-            color: white;
-            border: none;
-            padding: 10px 14px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 0.85rem;
-        }
-
+        .header-title-wrap { display: flex; align-items: baseline; gap: 10px; }
+        h1 { margin: 0; font-size: 1.4rem; color: var(--primary); }
+        .version-badge { font-size: 0.75rem; background-color: #dbeafe; color: #1e40af; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
+        .status-badge { font-size: 0.75rem; background-color: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
+        .status-badge.updated { background-color: #dcfce7; color: #15803d; }
+        .total-assets-container { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+        .total-label { font-size: 0.9rem; color: #666; font-weight: bold; }
+        .total-amount { font-size: 1.8rem; font-weight: bold; color: #2c3e50; }
+        .toggle-btn { background: none; border: 1px solid var(--border-color); border-radius: 50%; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+        .upload-btn { background-color: var(--accent); color: white; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .upload-btn:hover { background-color: #2980b9; }
         #csvFile { display: none; }
-
-        .status-banner {
-            display: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-weight: bold;
-            font-size: 0.9rem;
-        }
-
-        .status-loading { background-color: #e0f2fe; color: #0369a1; }
-        .status-saved { background-color: #dcfce7; color: #15803d; }
-        .status-warning { background-color: #fef3c7; color: #92400e; }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-
-        .card h2 {
-            margin-top: 0;
-            font-size: 1.1rem;
-            color: var(--primary);
-            border-bottom: 2px solid var(--bg-color);
-            padding-bottom: 10px;
-        }
-
-        .chart-container {
-            position: relative;
-            height: 280px;
-        }
-
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px; }
+        .card { background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .card h2 { margin-top: 0; font-size: 1.1rem; color: var(--primary); border-bottom: 2px solid var(--bg-color); padding-bottom: 10px; }
+        .chart-container { position: relative; height: 280px; }
         .table-container { overflow-x: auto; }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.88rem;
-        }
-
-        th, td {
-            padding: 10px 12px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        th { background-color: #f8f9fa; color: var(--primary); font-weight: bold; }
-
-        .badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: bold;
-        }
-
-        .badge-loading { background-color: #e0f2fe; color: #0284c7; }
-        .badge-fast { background-color: #dcfce7; color: #15803d; }
-        .badge-cached { background-color: #fef3c7; color: #b45309; }
-        .badge-error { background-color: #fee2e2; color: #991b1b; }
-        .badge-manual { background-color: #f3f4f6; color: #4b5563; }
-
+        table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        th { background-color: #f8f9fa; color: var(--primary); font-weight: bold; white-space: nowrap; }
+        tr:hover { background-color: #f8f9fa; }
         .number { text-align: right; font-variant-numeric: tabular-nums; }
-        .text-error { color: var(--danger-color); font-weight: bold; }
-        .val-hidden { letter-spacing: 2px; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; white-space: nowrap; }
+        .badge-auto { background-color: #e8f8f5; color: #1abc9c; }
+        .badge-manual { background-color: #fef9e7; color: #f39c12; }
+        .changelog-list { font-size: 0.85rem; color: #555; padding-left: 20px; margin: 5px 0; }
     </style>
 </head>
 <body>
@@ -217,7 +62,8 @@
         <div class="header-left">
             <div class="header-title-wrap">
                 <h1>資産管理ダッシュボード</h1>
-                <span class="version-badge">v1.6.0 (Stooq API対応)</span>
+                <span class="version-badge">v2.1.0</span>
+                <span id="statusBadge" class="status-badge">CSVファイルを読み込んでください</span>
             </div>
             <div class="total-assets-container">
                 <span class="total-label">総資産額:</span>
@@ -225,30 +71,25 @@
                 <button id="toggleMaskBtn" class="toggle-btn" title="表示/非表示切替">👁️</button>
             </div>
         </div>
-        <div class="header-controls">
-            <label class="upload-btn">
-                CSVを読み込む
-                <input type="file" id="csvFile" accept=".csv">
-            </label>
-            <button id="clearDataBtn" class="clear-btn">データをクリア</button>
-        </div>
+        <label class="upload-btn">
+            CSVを読み込む
+            <input type="file" id="csvFile" accept=".csv">
+        </label>
     </header>
-
-    <div id="statusBanner" class="status-banner"></div>
 
     <div class="dashboard-grid">
         <div class="card">
-            <h2>種別ごとの資産構成 (時価ベース)</h2>
+            <h2>種別ごとの資産構成</h2>
             <div class="chart-container"><canvas id="typeChart"></canvas></div>
         </div>
         <div class="card">
-            <h2>口座ごとの資産構成 (時価ベース)</h2>
+            <h2>口座ごとの資産構成</h2>
             <div class="chart-container"><canvas id="accountChart"></canvas></div>
         </div>
     </div>
 
     <div class="card">
-        <h2>資産明細</h2>
+        <h2>資産明細（リアルタイム更新対応）</h2>
         <div class="table-container">
             <table id="assetTable">
                 <thead>
@@ -261,12 +102,24 @@
                         <th class="number">現在単価</th>
                         <th class="number">時価評価額(円)</th>
                         <th>通貨</th>
-                        <th>取得ステータス</th>
+                        <th>ステータス</th>
                     </tr>
                 </thead>
-                <tbody></tbody>
+                <tbody>
+                    <tr><td colspan="9" style="text-align: center; color: #888;">右上の「CSVを読み込む」ボタンからファイルを指定してください。</td></tr>
+                </tbody>
             </table>
         </div>
+    </div>
+
+    <div class="card">
+        <h2>ℹ️ バージョン情報 & 変更履歴</h2>
+        <p><strong>現在のバージョン:</strong> v2.1.0</p>
+        <ul class="changelog-list">
+            <li><strong>v2.1.0:</strong> アプリ内へのバージョン管理・履歴表示機能の統合、バックグラウンド更新の安定化。</li>
+            <li><strong>v2.0.0:</strong> ブラウザのプロキシ経由による株価の漸進的（2秒おき）自動更新機能の実装。</li>
+            <li><strong>v1.0.0:</strong> CSVインポートおよびダッシュボード基本機能のリリース。</li>
+        </ul>
     </div>
 </div>
 
@@ -274,22 +127,20 @@
     let typeChartInstance = null;
     let accountChartInstance = null;
     let isMasked = false;
-    let globalTotalAsset = 0;
-
-    const STORAGE_KEY = 'portfolio_csv_data_v1';
-    const PRICE_CACHE_KEY = 'portfolio_price_cache_v1';
-    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    let assetData = [];
 
     document.addEventListener("DOMContentLoaded", () => {
-        const savedCsv = localStorage.getItem(STORAGE_KEY);
-        if (savedCsv) parseAndProcessCsv(savedCsv, false);
+        // ダウンロードリンクの動的生成（Data URI）
+        const htmlContent = document.documentElement.outerHTML;
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        document.getElementById('downloadLink').href = URL.createObjectURL(blob);
 
         document.getElementById('csvFile').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = function(evt) {
+            reader.onload = async function(evt) {
                 const buffer = evt.target.result;
                 let text = "";
                 try {
@@ -297,235 +148,156 @@
                 } catch (err) {
                     text = new TextDecoder('shift-jis').decode(buffer);
                 }
-                try { localStorage.setItem(STORAGE_KEY, text); } catch(e) {}
-                parseAndProcessCsv(text, true);
+
+                Papa.parse(text, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        initializeData(results.data);
+                    }
+                });
             };
             reader.readAsArrayBuffer(file);
         });
 
-        document.getElementById('clearDataBtn').addEventListener('click', () => {
-            if (confirm('保存データを削除しますか？')) {
-                localStorage.removeItem(STORAGE_KEY);
-                localStorage.removeItem(PRICE_CACHE_KEY);
-                location.reload();
-            }
-        });
-
         document.getElementById('toggleMaskBtn').addEventListener('click', () => {
             isMasked = !isMasked;
-            updateMaskDisplay();
+            updateDisplay();
         });
     });
 
-    function parseAndProcessCsv(csvText, isNewUpload) {
-        Papa.parse(csvText, {
-            header: true,
-            skipEmptyLines: true,
-            complete: async (results) => {
-                await processAndRenderSequential(results.data, isNewUpload);
-            }
-        });
-    }
+    function initializeData(rawRows) {
+        assetData = [];
+        for (const row of rawRows) {
+            if (!row['種別'] && !row['銘柄']) continue;
 
-    function showStatus(message, typeClass) {
-        const banner = document.getElementById('statusBanner');
-        banner.className = `status-banner ${typeClass}`;
-        banner.innerHTML = message;
-        banner.style.display = 'block';
-    }
+            const qty = Number(String(row['保有数量'] || '0').replace(/,/g, '')) || 0;
+            const unitPrice = Number(String(row['平均取得価額'] || '0').replace(/,/g, '')) || 0;
+            const code = String(row['銘柄コード・ティッカー'] || '').trim();
+            const type = String(row['種別'] || '').trim();
+            const name = String(row['銘柄'] || '').trim();
+            const account = String(row['口座'] || '').trim();
 
-    function getPriceCache() {
-        try { return JSON.parse(localStorage.getItem(PRICE_CACHE_KEY) || '{}'); } catch (e) { return {}; }
-    }
+            let marketValue = Number(String(row['時価評価額[円]'] || '0').replace(/,/g, '')) || (qty * unitPrice);
 
-    function setPriceCache(code, unitPrice) {
-        try {
-            const cache = getPriceCache();
-            const now = new Date();
-            cache[code] = { price: unitPrice, fetchedAt: `${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}` };
-            localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(cache));
-        } catch (e) {}
-    }
-
-    // 安定取得用API (Stooq経由)
-    async function fetchPriceForAsset(code, currency, isAuto) {
-        if (!isAuto) return { price: 1, routeName: '手動/固定', routeClass: 'badge-manual', error: false };
-
-        const cleanCode = String(code || '').trim();
-        const priceCache = getPriceCache();
-
-        if (cleanCode) {
-            // 日本株は 1540.JP、米国株は AAPL.US の形式に変換
-            const symbol = /^\d{4}$/.test(cleanCode) ? `${cleanCode}.JP` : `${cleanCode}.US`;
-            const stooqUrl = `https://stooq.com/q/l/?s=${symbol.toLowerCase()}&f=sdlp2hgn&e=csv`;
-
-            try {
-                const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(stooqUrl)}`);
-                if (response.ok) {
-                    const csvText = await response.text();
-                    const lines = csvText.trim().split('\n');
-                    if (lines.length > 1) {
-                        const values = lines[1].split(',');
-                        const closePrice = parseFloat(values[3]);
-                        if (!isNaN(closePrice) && closePrice > 0) {
-                            const usdRate = (currency === 'USD') ? 155 : 1;
-                            const finalPrice = closePrice * usdRate;
-                            setPriceCache(cleanCode, finalPrice);
-                            return { price: finalPrice, routeName: 'リアルタイム取得', routeClass: 'badge-fast', error: false };
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn(`[Stooq Fetch Failed] ${cleanCode}`, err);
-            }
+            assetData.push({
+                type: type,
+                code: code,
+                name: name,
+                account: account,
+                qty: qty,
+                unitPrice: unitPrice,
+                marketValue: marketValue,
+                currency: 'JPY',
+                status: '初期表示'
+            });
         }
 
-        if (priceCache[cleanCode]) {
-            const cached = priceCache[cleanCode];
-            return { price: cached.price, routeName: `通信失敗 (${cached.fetchedAt}データ)`, routeClass: 'badge-cached', error: true };
-        }
-
-        return { price: 0, routeName: '通信失敗 (取得エラー)', routeClass: 'badge-error', error: true };
+        updateDisplay();
+        startBackgroundUpdate();
     }
 
-    function renderInitialLoadingTable(validRows) {
+    function updateDisplay() {
+        let total = 0;
         const tbody = document.querySelector("#assetTable tbody");
         tbody.innerHTML = "";
-        const priceCache = getPriceCache();
 
-        validRows.forEach((row, idx) => {
+        assetData.forEach((item) => {
+            total += item.marketValue;
             const tr = document.createElement("tr");
-            tr.id = `asset-row-${idx}`;
-            const isAuto = String(row['自動取得']).trim() === '1';
-            const code = String(row['銘柄コード'] || '').trim();
-            const qty = Number(String(row['数量'] || '0').replace(/,/g, '')) || 0;
-            const cached = priceCache[code];
-
-            let initialPriceText = '⌛ 通信中...';
-            let initialValText = '⌛ 通信中...';
-            let initialBadge = '<span class="badge badge-loading">⌛ 通信中...</span>';
-
-            if (!isAuto) {
-                initialPriceText = '-';
-                initialValText = Math.round(qty).toLocaleString();
-                initialBadge = '<span class="badge badge-manual">手動/固定</span>';
-            } else if (cached) {
-                initialPriceText = Math.round(cached.price).toLocaleString();
-                initialValText = Math.round(qty * cached.price).toLocaleString();
-                initialBadge = `<span class="badge badge-loading">⌛ 最新取得中...</span>`;
-            }
 
             tr.innerHTML = `
-                <td>${row['種別'] || ''}</td>
-                <td>${row['銘柄コード'] || '-'}</td>
-                <td><strong>${row['銘柄・名称'] || ''}</strong></td>
-                <td>${row['口座'] || ''}</td>
-                <td class="number">${qty.toLocaleString()}</td>
-                <td class="number cell-unit-price">${initialPriceText}</td>
-                <td class="number cell-market-val">${initialValText}</td>
-                <td>${row['通貨'] || 'JPY'}</td>
-                <td class="cell-status">${initialBadge}</td>
+                <td>${item.type}</td>
+                <td>${item.code || '-'}</td>
+                <td><strong>${item.name}</strong></td>
+                <td>${item.account}</td>
+                <td class="number">${item.qty.toLocaleString()}</td>
+                <td class="number">${item.unitPrice.toLocaleString(undefined, {maximumFractionDigits: 2})}</td>
+                <td class="number">${isMasked ? '****' : Math.round(item.marketValue).toLocaleString()}</td>
+                <td>${item.currency}</td>
+                <td><span class="badge ${item.status === '更新完了' ? 'badge-auto' : 'badge-manual'}">${item.status}</span></td>
             `;
             tbody.appendChild(tr);
         });
+
+        const displayEl = document.getElementById('totalAmountDisplay');
+        displayEl.textContent = isMasked ? '¥ ********' : '¥ ' + Math.round(total).toLocaleString();
+
+        renderCharts();
     }
 
-    async function processAndRenderSequential(rawData, isNewUpload) {
-        const validRows = rawData.filter(r => r['種別'] || r['銘柄・名称']);
-        renderInitialLoadingTable(validRows);
+    async function startBackgroundUpdate() {
+        const badge = document.getElementById('statusBadge');
+        badge.textContent = 'バックグラウンド更新中...';
 
-        const autoFetchCount = validRows.filter(r => String(r['自動取得']).trim() === '1').length;
-        let completedCount = 0;
-        let hasAnyError = false;
+        for (let i = 0; i < assetData.length; i++) {
+            const item = assetData[i];
+            if (item.code && item.code.length > 0) {
+                const fetchedPrice = await fetchLatestPrice(item.code);
+                if (fetchedPrice !== null) {
+                    item.unitPrice = fetchedPrice;
+                    item.marketValue = item.qty * fetchedPrice;
+                    item.status = '更新完了';
+                    updateDisplay();
+                }
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
 
-        showStatus(`⌛ 株価データを取得中... (0 / ${autoFetchCount} 完了)`, 'status-loading');
-        const processedResults = [];
+        badge.textContent = '最新情報に更新完了';
+        badge.classList.add('updated');
+    }
 
-        for (let i = 0; i < validRows.length; i++) {
-            const row = validRows[i];
-            const qty = Number(String(row['数量'] || '0').replace(/,/g, '')) || 0;
-            const isAuto = String(row['自動取得']).trim() === '1';
-            const code = String(row['銘柄コード'] || '').trim();
-            const currency = String(row['通貨'] || 'JPY').trim();
-
-            let priceInfo;
-            if (isAuto) {
-                priceInfo = await fetchPriceForAsset(code, currency, isAuto);
-                completedCount++;
-                showStatus(`⌛ 株価データを取得中... (${completedCount} / ${autoFetchCount} 完了)`, 'status-loading');
-                await delay(200);
-            } else {
-                priceInfo = { price: 1, routeName: '手動/固定', routeClass: 'badge-manual', error: false };
+    async function fetchLatestPrice(code) {
+        try {
+            let symbol = code;
+            if (/^\d{4}$/.test(code)) {
+                symbol = `${code}.T`;
+            } else if (code.toUpperCase() === 'BTC') {
+                symbol = 'BTC-JPY';
             }
 
-            if (priceInfo.error) hasAnyError = true;
-            const marketValue = isAuto ? (qty * priceInfo.price) : (qty * (currency === 'USD' ? 155 : 1));
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
 
-            const item = { ...row, parsedQty: qty, unitPrice: priceInfo.price, marketValue, isAuto, routeName: priceInfo.routeName, routeClass: priceInfo.routeClass };
-            processedResults.push(item);
-            updateTableRow(i, item);
-        }
-
-        globalTotalAsset = processedResults.reduce((sum, item) => sum + item.marketValue, 0);
-        updateMaskDisplay();
-        renderCharts(processedResults);
-
-        if (hasAnyError) {
-            showStatus('⚠️ 一部銘柄のデータ取得に失敗したため、キャッシュまたはエラーを表示しています。', 'status-warning');
-        } else {
-            showStatus('✅ 最新の株価データを正常に取得・更新しました。', 'status-saved');
+            const res = await fetch(proxyUrl);
+            if (!res.ok) return null;
+            const data = await res.json();
+            const meta = data?.chart?.result?.[0]?.meta;
+            return meta?.regularMarketPrice || meta?.chartPreviousClose || null;
+        } catch (e) {
+            return null;
         }
     }
 
-    function updateTableRow(idx, item) {
-        const tr = document.getElementById(`asset-row-${idx}`);
-        if (!tr) return;
+    function renderCharts() {
+        const typeTotals = {};
+        const accountTotals = {};
 
-        const priceCell = tr.querySelector('.cell-unit-price');
-        const valCell = tr.querySelector('.cell-market-val');
-        const statusCell = tr.querySelector('.cell-status');
-
-        if (priceCell) priceCell.innerHTML = (!item.isAuto) ? '-' : (item.unitPrice === 0 ? '<span class="text-error">取得失敗</span>' : Math.round(item.unitPrice).toLocaleString());
-        if (valCell) {
-            valCell.setAttribute('data-val', item.marketValue);
-            valCell.textContent = isMasked ? '****' : Math.round(item.marketValue).toLocaleString();
-        }
-        if (statusCell) statusCell.innerHTML = `<span class="badge ${item.routeClass}">${item.routeName}</span>`;
-    }
-
-    function updateMaskDisplay() {
-        const displayEl = document.getElementById('totalAmountDisplay');
-        const btnEl = document.getElementById('toggleMaskBtn');
-
-        displayEl.textContent = isMasked ? '¥ ********' : '¥ ' + Math.round(globalTotalAsset).toLocaleString();
-        btnEl.textContent = isMasked ? '🙈' : '👁️';
-
-        document.querySelectorAll('.cell-market-val').forEach(cell => {
-            const val = Number(cell.getAttribute('data-val') || 0);
-            cell.textContent = isMasked ? '****' : Math.round(val).toLocaleString();
-        });
-    }
-
-    function renderCharts(data) {
-        const typeTotals = {}, accountTotals = {};
-        data.forEach(item => {
-            typeTotals[item['種別'] || 'その他'] = (typeTotals[item['種別'] || 'その他'] || 0) + item.marketValue;
-            accountTotals[item['口座'] || 'その他'] = (accountTotals[item['口座'] || 'その他'] || 0) + item.marketValue;
+        assetData.forEach(item => {
+            typeTotals[item.type] = (typeTotals[item.type] || 0) + item.marketValue;
+            accountTotals[item.account] = (accountTotals[item.account] || 0) + item.marketValue;
         });
 
-        const colors = ['#3498db', '#2ecc71', '#e74c3c', '#f1c40f', '#9b59b6', '#34495e', '#1abc9c', '#e67e22'];
+        const colors = ['#2b5c8f', '#d95f02', '#2ca02c', '#d62728', '#7570b3', '#8c564b', '#17becf', '#e377c2'];
 
         if (typeChartInstance) typeChartInstance.destroy();
         typeChartInstance = new Chart(document.getElementById('typeChart').getContext('2d'), {
             type: 'doughnut',
-            data: { labels: Object.keys(typeTotals), datasets: [{ data: Object.values(typeTotals), backgroundColor: colors }] },
+            data: {
+                labels: Object.keys(typeTotals),
+                datasets: [{ data: Object.values(typeTotals), backgroundColor: colors }]
+            },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
         });
 
         if (accountChartInstance) accountChartInstance.destroy();
         accountChartInstance = new Chart(document.getElementById('accountChart').getContext('2d'), {
             type: 'doughnut',
-            data: { labels: Object.keys(accountTotals), datasets: [{ data: Object.values(accountTotals), backgroundColor: colors }] },
+            data: {
+                labels: Object.keys(accountTotals),
+                datasets: [{ data: Object.values(accountTotals), backgroundColor: colors }]
+            },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
         });
     }
