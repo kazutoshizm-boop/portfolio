@@ -1,15 +1,14 @@
 <!DOCTYPE html>
 <!-- ========================================================= -->
-<!-- 資産管理ダッシュボード App Version: v1.4.0 (2026-09-16)   -->
-<!--  - ハードコード基準価格（mockPrices）の完全削除             -->
-<!--  - 価格データのローカルストレージキャッシュ化 (取得日保存)  -->
-<!--  - 通信失敗の完全可視化 (警告バッジ・エラー表示)           -->
+<!-- 資産管理ダッシュボード App Version: v1.5.0 (2026-09-16)   -->
+<!--  - 通信中プログレス表示（「通信中...」バッジ・進捗バー）  -->
+<!--  - 無料CORSプロキシ過多による遮断回避（リトライ＆順次処理）-->
 <!-- ========================================================= -->
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>資産管理ダッシュボード v1.4.0</title>
+    <title>資産管理ダッシュボード v1.5.0</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
@@ -246,6 +245,12 @@
             white-space: nowrap;
         }
 
+        .badge-loading {
+            background-color: #e0f2fe;
+            color: #0284c7;
+            animation: pulse 1.5s infinite;
+        }
+
         .badge-fast {
             background-color: #dcfce7;
             color: #15803d;
@@ -271,6 +276,12 @@
             color: #4b5563;
         }
 
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1.0; }
+            100% { opacity: 0.6; }
+        }
+
         .number {
             text-align: right;
             font-variant-numeric: tabular-nums;
@@ -279,6 +290,10 @@
         .text-error {
             color: var(--danger-color);
             font-weight: bold;
+        }
+
+        .text-muted {
+            color: #94a3b8;
         }
 
         .val-hidden {
@@ -293,7 +308,7 @@
         <div class="header-left">
             <div class="header-title-wrap">
                 <h1>資産管理ダッシュボード</h1>
-                <span class="version-badge">v1.4.0 (通信エラー・キャッシュ厳密化)</span>
+                <span class="version-badge">v1.5.0 (通信中表示・プロキシ補強)</span>
             </div>
             <div class="total-assets-container">
                 <span class="total-label">総資産額:</span>
@@ -356,25 +371,21 @@
     let accountChartInstance = null;
     let isMasked = false;
     let globalTotalAsset = 0;
-    let currentParsedData = [];
 
     const STORAGE_KEY = 'portfolio_csv_data_v1';
     const PRICE_CACHE_KEY = 'portfolio_price_cache_v1';
 
+    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
     document.addEventListener("DOMContentLoaded", () => {
-        // 1. ローカルストレージにCSVデータがあれば自動で読み込む
         const savedCsv = localStorage.getItem(STORAGE_KEY);
         if (savedCsv) {
-            showStatus('💾 保存されたCSVデータを読み込んでいます...', 'status-loading');
             parseAndProcessCsv(savedCsv, false);
         }
 
-        // 2. CSVファイルアップロードイベント
         document.getElementById('csvFile').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
-            showStatus('⏳ 新しいCSVファイルを処理中...', 'status-loading');
 
             const reader = new FileReader();
             reader.onload = function(evt) {
@@ -398,7 +409,6 @@
             reader.readAsArrayBuffer(file);
         });
 
-        // 3. データ削除ボタン（CSVと価格キャッシュの初期化）
         document.getElementById('clearDataBtn').addEventListener('click', () => {
             if (confirm('保存されているCSVデータおよび価格キャッシュを削除しますか？')) {
                 localStorage.removeItem(STORAGE_KEY);
@@ -407,7 +417,6 @@
             }
         });
 
-        // 4. マスク切替
         document.getElementById('toggleMaskBtn').addEventListener('click', () => {
             isMasked = !isMasked;
             updateMaskDisplay();
@@ -419,14 +428,7 @@
             header: true,
             skipEmptyLines: true,
             complete: async (results) => {
-                const hasErrors = await processAndRender(results.data);
-                
-                if (hasErrors) {
-                    showStatus('⚠️ 一部銘柄のリアルタイム通信に失敗しました。前回取得できたデータまたは通信エラーを表示しています。', 'status-warning');
-                } else {
-                    const msg = isNewUpload ? '✅ CSVデータを正常に読み込み、ローカルストレージに保存しました。' : '✅ データを最新状態で表示しています。';
-                    showStatus(msg, 'status-saved');
-                }
+                await processAndRenderSequential(results.data, isNewUpload);
             }
         });
     }
@@ -438,7 +440,6 @@
         banner.style.display = 'flex';
     }
 
-    // 価格キャッシュの取得・更新ヘルパー
     function getPriceCache() {
         try {
             return JSON.parse(localStorage.getItem(PRICE_CACHE_KEY) || '{}');
@@ -462,14 +463,12 @@
         }
     }
 
-    // 銘柄コードから「ティッカーコード（個別株・ETF）」かどうかを判定
     function isTickerCode(code) {
         if (!code) return false;
         const clean = String(code).trim();
         return /^\d{4}$/.test(clean) || /^[A-Za-z]+$/.test(clean);
     }
 
-    // 価格取得ロジック（暗黙の基準価格を排除）
     async function fetchPriceForAsset(code, currency, isAuto) {
         if (!isAuto) {
             return { price: 1, routeName: '手動/固定', routeClass: 'badge-manual', error: false };
@@ -478,119 +477,147 @@
         const cleanCode = String(code || '').trim();
         const priceCache = getPriceCache();
 
-        // 1. 個別株（ティッカーあり）: API直接通信試行
         if (isTickerCode(cleanCode)) {
             const symbol = /^\d{4}$/.test(cleanCode) ? `${cleanCode}.T` : cleanCode;
             const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`;
-            
+
             const proxies = [
                 (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-                (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
+                (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
             ];
 
             for (const getProxyUrl of proxies) {
                 try {
                     const proxyUrl = getProxyUrl(targetUrl);
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
                     const response = await fetch(proxyUrl, { signal: controller.signal });
                     clearTimeout(timeoutId);
 
                     if (response.ok) {
-                        const json = await response.json();
+                        const text = await response.text();
+                        const json = JSON.parse(text);
                         const marketPrice = json.chart?.result?.[0]?.meta?.regularMarketPrice;
-                        if (marketPrice) {
+
+                        if (marketPrice && !isNaN(marketPrice)) {
                             const usdRate = (currency === 'USD') ? 155 : 1;
                             const finalPrice = marketPrice * usdRate;
-                            
-                            // 通信成功時：ローカルストレージに最新価格を保存
+
                             setPriceCache(cleanCode, finalPrice);
 
-                            return { 
-                                price: finalPrice, 
-                                routeName: 'リアルタイム取得', 
+                            return {
+                                price: finalPrice,
+                                routeName: 'リアルタイム取得',
                                 routeClass: 'badge-fast',
                                 error: false
                             };
                         }
                     }
                 } catch (err) {
-                    console.warn(`[API試行失敗] ${cleanCode}`, err);
+                    console.warn(`[API試行失敗] Code: ${cleanCode}`, err);
                 }
-            }
-        } 
-        // 2. 投資信託など（ティッカーなし）: 中継サーバー通信試行
-        else if (cleanCode) {
-            try {
-                const proxyServerUrl = `https://your-proxy-server.com/api/fund?code=${encodeURIComponent(cleanCode)}`;
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-                const response = await fetch(proxyServerUrl, { signal: controller.signal });
-                clearTimeout(timeoutId);
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && data.price) {
-                        const finalPrice = Number(data.price);
-                        
-                        // 通信成功時：ローカルストレージに最新価格を保存
-                        setPriceCache(cleanCode, finalPrice);
-
-                        return { 
-                            price: finalPrice, 
-                            routeName: '中継サーバー経由', 
-                            routeClass: 'badge-proxy',
-                            error: false
-                        };
-                    }
-                }
-            } catch (err) {
-                console.warn(`[中継サーバー応答なし] ${cleanCode}`, err);
             }
         }
 
-        // 3. API通信失敗時のフォールバック処理（暗黙の基準値は全削除）
-        // 過去に1度でも正常取得して保存されたデータがある場合
         if (priceCache[cleanCode]) {
             const cached = priceCache[cleanCode];
-            return { 
-                price: cached.price, 
-                routeName: `通信失敗 (${cached.fetchedAt}データ)`, 
+            return {
+                price: cached.price,
+                routeName: `通信失敗 (${cached.fetchedAt}データ)`,
                 routeClass: 'badge-cached',
                 error: true
             };
         }
 
-        // キャッシュすらない場合は完全に通信失敗として0表示
-        return { 
-            price: 0, 
-            routeName: '通信失敗 (取得エラー)', 
+        return {
+            price: 0,
+            routeName: '通信失敗 (取得エラー)',
             routeClass: 'badge-error',
             error: true
         };
     }
 
-    async function processAndRender(data) {
-        currentParsedData = [];
-        globalTotalAsset = 0;
+    function renderInitialLoadingTable(validRows) {
+        const tbody = document.querySelector("#assetTable tbody");
+        tbody.innerHTML = "";
+
+        const priceCache = getPriceCache();
+
+        validRows.forEach((row, idx) => {
+            const tr = document.createElement("tr");
+            tr.id = `asset-row-${idx}`;
+
+            const isAuto = String(row['自動取得']).trim() === '1';
+            const code = String(row['銘柄コード'] || '').trim();
+            const qty = Number(String(row['数量'] || '0').replace(/,/g, '')) || 0;
+            const cached = priceCache[code];
+
+            let initialPriceText = '⌛ 通信中...';
+            let initialValText = '⌛ 通信中...';
+            let initialBadge = '<span class="badge badge-loading">⌛ 通信中...</span>';
+
+            if (!isAuto) {
+                initialPriceText = '-';
+                initialValText = Math.round(qty).toLocaleString();
+                initialBadge = '<span class="badge badge-manual">手動/固定</span>';
+            } else if (cached) {
+                initialPriceText = Math.round(cached.price).toLocaleString();
+                initialValText = Math.round(qty * cached.price).toLocaleString();
+                initialBadge = `<span class="badge badge-loading">⌛ 最新データ取得中... (${cached.fetchedAt})</span>`;
+            }
+
+            tr.innerHTML = `
+                <td>${row['種別'] || ''}</td>
+                <td>${row['銘柄コード'] || '-'}</td>
+                <td><strong>${row['銘柄・名称'] || ''}</strong></td>
+                <td>${row['口座'] || ''}</td>
+                <td class="number">${qty.toLocaleString()}</td>
+                <td class="number cell-unit-price">${initialPriceText}</td>
+                <td class="number cell-market-val">${initialValText}</td>
+                <td>${row['通貨'] || 'JPY'}</td>
+                <td class="cell-status">${initialBadge}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function processAndRenderSequential(rawData, isNewUpload) {
+        const validRows = rawData.filter(r => r['種別'] || r['銘柄・名称']);
+        
+        renderInitialLoadingTable(validRows);
+
+        const autoFetchCount = validRows.filter(r => String(r['自動取得']).trim() === '1').length;
+        let completedCount = 0;
         let hasAnyError = false;
 
-        const promises = data.map(async (row) => {
-            if (!row['種別'] && !row['銘柄・名称']) return null;
+        showStatus(`⌛ 株価データを取得中... (0 / ${autoFetchCount} 完了)`, 'status-loading');
 
+        const processedResults = [];
+
+        for (let i = 0; i < validRows.length; i++) {
+            const row = validRows[i];
             const qty = Number(String(row['数量'] || '0').replace(/,/g, '')) || 0;
             const isAuto = String(row['自動取得']).trim() === '1';
             const code = String(row['銘柄コード'] || '').trim();
             const currency = String(row['通貨'] || 'JPY').trim();
 
-            const priceInfo = await fetchPriceForAsset(code, currency, isAuto);
+            let priceInfo;
+            if (isAuto) {
+                priceInfo = await fetchPriceForAsset(code, currency, isAuto);
+                completedCount++;
+                showStatus(`⌛ 株価データを取得中... (${completedCount} / ${autoFetchCount} 完了)`, 'status-loading');
+                await delay(150);
+            } else {
+                priceInfo = { price: 1, routeName: '手動/固定', routeClass: 'badge-manual', error: false };
+            }
+
             if (priceInfo.error) hasAnyError = true;
 
             const marketValue = isAuto ? (qty * priceInfo.price) : (qty * (currency === 'USD' ? 155 : 1));
 
-            return {
+            const item = {
                 ...row,
                 parsedQty: qty,
                 unitPrice: priceInfo.price,
@@ -600,18 +627,46 @@
                 routeClass: priceInfo.routeClass,
                 hasError: priceInfo.error
             };
-        });
+            processedResults.push(item);
 
-        const results = await Promise.all(promises);
-        currentParsedData = results.filter(item => item !== null);
+            updateTableRow(i, item);
+        }
 
-        globalTotalAsset = currentParsedData.reduce((sum, item) => sum + item.marketValue, 0);
-
+        globalTotalAsset = processedResults.reduce((sum, item) => sum + item.marketValue, 0);
         updateMaskDisplay();
-        renderTable(currentParsedData);
-        renderCharts(currentParsedData);
+        renderCharts(processedResults);
 
-        return hasAnyError;
+        if (hasAnyError) {
+            showStatus('⚠️ 一部銘柄のリアルタイム取得に失敗しました。前回保存されたデータ、または取得エラーを表示しています。', 'status-warning');
+        } else {
+            const msg = isNewUpload ? '✅ CSVデータを正常に読み込み、ローカルストレージに最新価格を保存しました。' : '✅ 最新の価格データを取得・表示しました。';
+            showStatus(msg, 'status-saved');
+        }
+    }
+
+    function updateTableRow(idx, item) {
+        const tr = document.getElementById(`asset-row-${idx}`);
+        if (!tr) return;
+
+        const priceCell = tr.querySelector('.cell-unit-price');
+        const valCell = tr.querySelector('.cell-market-val');
+        const statusCell = tr.querySelector('.cell-status');
+
+        if (priceCell) {
+            priceCell.innerHTML = (!item.isAuto) 
+                ? '-' 
+                : (item.unitPrice === 0 ? '<span class="text-error">取得失敗</span>' : Math.round(item.unitPrice).toLocaleString());
+        }
+
+        if (valCell) {
+            valCell.setAttribute('data-val', item.marketValue);
+            valCell.textContent = isMasked ? '****' : Math.round(item.marketValue).toLocaleString();
+            valCell.className = `number cell-market-val table-market-val ${item.unitPrice === 0 && item.isAuto ? 'text-error' : ''}`;
+        }
+
+        if (statusCell) {
+            statusCell.innerHTML = `<span class="badge ${item.routeClass}">${item.routeName}</span>`;
+        }
     }
 
     function updateMaskDisplay() {
@@ -630,34 +685,8 @@
 
         const priceCells = document.querySelectorAll('.table-market-val');
         priceCells.forEach(cell => {
-            const val = Number(cell.getAttribute('data-val'));
+            const val = Number(cell.getAttribute('data-val') || 0);
             cell.textContent = isMasked ? '****' : Math.round(val).toLocaleString();
-        });
-    }
-
-    function renderTable(data) {
-        const tbody = document.querySelector("#assetTable tbody");
-        tbody.innerHTML = "";
-
-        data.forEach(item => {
-            const tr = document.createElement("tr");
-
-            const displayUnitPrice = (!item.isAuto) 
-                ? '-' 
-                : (item.unitPrice === 0 ? '<span class="text-error">取得失敗</span>' : Math.round(item.unitPrice).toLocaleString());
-
-            tr.innerHTML = `
-                <td>${item['種別'] || ''}</td>
-                <td>${item['銘柄コード'] || '-'}</td>
-                <td><strong>${item['銘柄・名称'] || ''}</strong></td>
-                <td>${item['口座'] || ''}</td>
-                <td class="number">${item.parsedQty.toLocaleString()}</td>
-                <td class="number">${displayUnitPrice}</td>
-                <td class="number table-market-val" data-val="${item.marketValue}">${isMasked ? '****' : Math.round(item.marketValue).toLocaleString()}</td>
-                <td>${item['通貨'] || 'JPY'}</td>
-                <td><span class="badge ${item.routeClass}">${item.routeName}</span></td>
-            `;
-            tbody.appendChild(tr);
         });
     }
 
