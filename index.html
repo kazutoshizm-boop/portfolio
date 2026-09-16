@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ポートフォリオ管理アプリ - V2</title>
+    <title>ポートフォリオ管理アプリ - V2.3.0</title>
     <style>
         :root {
             --primary-color: #2563eb;
@@ -106,7 +106,25 @@
             height: 100%;
             width: 100%;
         }
-        .status-msg { margin-top: 10px; font-size: 13px; color: #64748b; }
+        .status-bar {
+            background: var(--card-bg);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            font-size: 13px;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #10b981;
+            margin-right: 6px;
+        }
     </style>
 </head>
 <body>
@@ -115,7 +133,7 @@
     <header>
         <div class="header-title">
             <h1>My Portfolio App</h1>
-            <span class="version-badge">Version 2.0</span>
+            <span class="version-badge">Version 2.3.0</span>
         </div>
         <div>
             <div class="file-input-wrapper">
@@ -142,9 +160,15 @@
         </div>
     </div>
 
-    <div class="status-msg" id="statusMsg">※CSVを読み込むか、保存されたデータを使用します。</div>
+    <div class="status-bar">
+        <div>
+            <span class="status-indicator" id="statusDot"></span>
+            <span id="statusMsg">ステータス: 待機中（CSVをインポートしてください）</span>
+        </div>
+        <div id="lastUpdateInfo" style="color: #64748b;">最終データ時刻: -</div>
+    </div>
 
-    <div class="table-container" style="margin-top: 20px;">
+    <div class="table-container">
         <table id="portfolioTable">
             <thead>
                 <tr>
@@ -170,13 +194,17 @@
 
     // ローカルストレージからの読み込み
     window.addEventListener('DOMContentLoaded', () => {
-        const saved = localStorage.getItem('portfolio_master_data_v2');
+        const saved = localStorage.getItem('portfolio_master_data_v2.3');
+        const savedTime = localStorage.getItem('portfolio_master_time_v2.3');
         if (saved) {
             try {
                 portfolioData = JSON.parse(saved);
                 renderTable();
                 updateSummary();
-                document.getElementById('statusMsg').textContent = 'ローカルストレージからデータを読み込みました（V2）。';
+                document.getElementById('statusMsg').textContent = 'ステータス: ローカルストレージからデータを読み込みました';
+                if (savedTime) {
+                    document.getElementById('lastUpdateInfo').textContent = '最終データ時刻: ' + savedTime;
+                }
             } catch(e) {
                 console.error(e);
             }
@@ -188,10 +216,10 @@
         const file = e.target.files[0];
         if (!file) return;
 
+        document.getElementById('statusMsg').textContent = 'ステータス: CSVファイル読み込み中...';
         const reader = new FileReader();
         reader.onload = function(event) {
-            const text = event.target.result;
-            parseCSV(text);
+            parseCSV(event.target.result);
         };
         reader.readAsText(file, 'utf-8');
     });
@@ -219,31 +247,39 @@
             }
             cols.push(current.trim());
 
+            // 列構造の解析:
+            // 0: 種別, 1: 銘柄コード, 2: 銘柄名, 3: 口座, 4: 保有数量, 5: 現在値, 6: 通貨 ...
             if (cols.length >= 6) {
+                const qty = parseFloat(cols[4].replace(/,/g, '')) || 0;
+                const price = parseFloat(cols[5].replace(/,/g, '')) || 0;
+                
                 newPortfolio.push({
                     type: cols[0],
                     code: cols[1],
                     name: cols[2],
                     account: cols[3],
-                    quantity: parseFloat(cols[4].replace(/,/g, '')) || 0,
-                    unit: cols[5] || '',
-                    currency: cols[6] || 'JPY',
-                    autoFetch: parseInt(cols[7]) || 0,
-                    currentPrice: 0,
-                    marketValue: 0
+                    quantity: qty,
+                    currentPrice: price, 
+                    marketValue: qty * price, // 正しい計算式：保有数量 × 現在値
+                    currency: cols[6] || 'JPY'
                 });
             }
         }
 
         portfolioData = newPortfolio;
-        saveAndRefresh();
-        document.getElementById('statusMsg').textContent = `${portfolioData.length} 件のデータをインポートし、ブラウザに保存しました（V2）。`;
+        saveAndRefresh('CSVインポート完了（正確なデータを反映）');
     }
 
-    function saveAndRefresh() {
-        localStorage.setItem('portfolio_master_data_v2', JSON.stringify(portfolioData));
+    function saveAndRefresh(statusText) {
+        const nowStr = new Date().toLocaleString();
+        localStorage.setItem('portfolio_master_data_v2.3', JSON.stringify(portfolioData));
+        localStorage.setItem('portfolio_master_time_v2.3', nowStr);
+        
         renderTable();
         updateSummary();
+        
+        document.getElementById('statusMsg').textContent = 'ステータス: ' + statusText;
+        document.getElementById('lastUpdateInfo').textContent = '最終データ時刻: ' + nowStr;
     }
 
     function renderTable() {
@@ -257,9 +293,12 @@
         portfolioData.forEach((item) => {
             const tr = document.createElement('tr');
             
+            // 時価評価額の計算：現金等の場合は数量をそのまま評価額にする。それ以外は 保有数量 × 現在値
             let evalVal = item.marketValue;
-            if (evalVal === 0 && ['預金', '外貨預り金', '貯蓄型保険（元本保証）'].includes(item.type)) {
+            if (['預金', '外貨預り金', '貯蓄型保険（元本保証）'].includes(item.type)) {
                 evalVal = item.quantity;
+            } else {
+                evalVal = item.quantity * item.currentPrice;
             }
 
             tr.innerHTML = `
@@ -267,7 +306,7 @@
                 <td>${item.code || '-'}</td>
                 <td>${item.name}</td>
                 <td>${item.account}</td>
-                <td>${item.quantity.toLocaleString()} ${item.unit}</td>
+                <td>${item.quantity.toLocaleString()}</td>
                 <td>${item.currentPrice ? item.currentPrice.toLocaleString() : '-'}</td>
                 <td>${evalVal ? evalVal.toLocaleString() + ' ' + item.currency : '-'}</td>
                 <td>${item.currency}</td>
@@ -282,9 +321,12 @@
         let totalJPY = 0;
         portfolioData.forEach(item => {
             let val = item.marketValue;
-            if (val === 0 && ['預金', '外貨預り金', '貯蓄型保険（元本保証）'].includes(item.type)) {
+            if (['預金', '外貨預り金', '貯蓄型保険（元本保証）'].includes(item.type)) {
                 val = item.quantity;
+            } else {
+                val = item.quantity * item.currentPrice;
             }
+
             if (item.currency === 'JPY') {
                 totalJPY += val;
             } else if (item.currency === 'USD') {
@@ -295,36 +337,25 @@
         document.getElementById('totalAsset').textContent = '¥' + Math.round(totalJPY).toLocaleString();
     }
 
-    document.getElementById('fetchDataBtn').addEventListener('click', async () => {
+    // 株価自動取得ボタン：ランダムな嘘の生成は完全に廃止。ブラウザ環境では自動取得できないため「取得失敗」ステータスとする。
+    document.getElementById('fetchDataBtn').addEventListener('click', () => {
         const statusMsg = document.getElementById('statusMsg');
-        statusMsg.textContent = '株価・基準価額を自動取得中...';
-
-        for (let item of portfolioData) {
-            if (item.autoFetch === 1 && item.code) {
-                if (item.type === '国内株式') {
-                    item.currentPrice = Math.floor(Math.random() * 3000) + 1000;
-                    item.marketValue = item.quantity * item.currentPrice;
-                } else if (item.type === '米国株式') {
-                    item.currentPrice = Math.floor(Math.random() * 200) + 50;
-                    item.marketValue = item.quantity * item.currentPrice;
-                }
-            } else if (item.type === '投資信託') {
-                item.currentPrice = Math.floor(Math.random() * 10000) + 20000;
-                item.marketValue = (item.quantity / 10000) * item.currentPrice;
-            }
-        }
-
-        saveAndRefresh();
-        statusMsg.textContent = '最新の株価・評価額の取得が完了しました（V2）。';
+        const statusDot = document.getElementById('statusDot');
+        
+        // 取得失敗のステータスを明確に表示
+        statusDot.style.backgroundColor = '#ef4444';
+        statusMsg.textContent = 'ステータス: [取得失敗] ブラウザ単体では外部株価の自動取得ができないため、CSV内のデータを使用してください。';
     });
 
     document.getElementById('resetBtn').addEventListener('click', () => {
         if (confirm('保存されたデータをすべて削除しますか？')) {
-            localStorage.removeItem('portfolio_master_data_v2');
+            localStorage.removeItem('portfolio_master_data_v2.3');
+            localStorage.removeItem('portfolio_master_time_v2.3');
             portfolioData = [];
             renderTable();
             updateSummary();
-            document.getElementById('statusMsg').textContent = 'データをリセットしました。';
+            document.getElementById('statusMsg').textContent = 'ステータス: データをリセットしました。';
+            document.getElementById('lastUpdateInfo').textContent = '最終データ時刻: -';
         }
     });
 </script>
